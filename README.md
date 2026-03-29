@@ -1,18 +1,6 @@
 # ivanbaric/taxonomy
 
-Generic taxonomy package for Laravel 11/12. The package core stays intentionally small: two models, one polymorphic attachment trait, minimal migrations, config-driven model resolution, and optional tenancy hooks.
-
-## Default behavior
-- No translatable dependency.
-- No media library dependency.
-- No tenant model requirement.
-- No hardcoded auth or team logic.
-- No UUID, SEO, status, or custom base model assumptions.
-
-Out of the box the package provides:
-- `IvanBaric\Taxonomy\Models\Taxonomy`
-- `IvanBaric\Taxonomy\Models\TaxonomyItem`
-- `IvanBaric\Taxonomy\Traits\HasTaxonomies`
+Generic taxonomy package for Laravel 11/12/13. The package core stays intentionally small: two models, one polymorphic attachment trait, minimal migrations, config-driven model resolution, and optional tenancy hooks.
 
 ## Installation
 ```bash
@@ -30,7 +18,13 @@ php artisan vendor:publish --tag=taxonomy-migrations
 ```php
 use App\Models\Post;
 use IvanBaric\Taxonomy\Models\Taxonomy;
-use IvanBaric\Taxonomy\Models\TaxonomyItem;
+use IvanBaric\Taxonomy\Traits\HasTaxonomies;
+
+// Enable taxonomy attachment on your model.
+class Post extends \Illuminate\Database\Eloquent\Model
+{
+    use HasTaxonomies;
+}
 
 $taxonomy = Taxonomy::create([
     'name' => 'Categories',
