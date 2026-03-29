@@ -1,0 +1,45 @@
+{
+  "name": "ivanbaric/taxonomy",
+  "description": "Generic taxonomy package for Laravel with overridable models and optional tenancy support.",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "illuminate/support": "^11.0 || ^12.0",
+    "illuminate/database": "^11.0 || ^12.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "IvanBaric\\Taxonomy\\": "src/"
+    },
+    "files": [
+      "src/helpers.php"
+    ]
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "IvanBaric\\Taxonomy\\Tests\\": "tests/"
+    }
+  },
+  "require-dev": {
+    "orchestra/testbench": "^9.0 || ^10.0",
+    "pestphp/pest": "^3.0 || ^4.0"
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "IvanBaric\\Taxonomy\\TaxonomyServiceProvider"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "pest"
+  },
+  "config": {
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
