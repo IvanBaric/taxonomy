@@ -8,6 +8,7 @@ use Illuminate\Database\Schema\Blueprint;
 use IvanBaric\Taxonomy\Models\Taxonomy;
 use IvanBaric\Taxonomy\Models\TaxonomyItem;
 use Illuminate\Support\Facades\Schema;
+use IvanBaric\Taxonomy\Support\TaxonomyModels;
 use IvanBaric\Taxonomy\TaxonomyServiceProvider;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\Car;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\CustomTaxonomy;
@@ -48,6 +49,7 @@ abstract class TestCase extends Orchestra
         DealerTaxonomyItem::clearBootedModels();
         Car::clearBootedModels();
         Post::clearBootedModels();
+        TaxonomyModels::clearColumnExistsCache();
 
         $this->createBaseSchema();
     }
@@ -114,5 +116,89 @@ abstract class TestCase extends Orchestra
             $table->boolean('is_visible')->default(true);
             $table->timestamps();
         });
+    }
+
+    protected function enableTeamTenancy(
+        bool $withPivotTenantColumn = true,
+        bool $withTenantAwarePivotUnique = true,
+        array $configOverrides = []
+    ): void {
+        Schema::dropIfExists('taxonomyables');
+        Schema::dropIfExists('taxonomy_items');
+        Schema::dropIfExists('taxonomies');
+
+        Schema::create('taxonomies', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+            $table->string('slug');
+            $table->string('type');
+            $table->string('context')->nullable();
+            $table->string('input_type')->nullable();
+            $table->text('description')->nullable();
+            $table->boolean('is_filterable')->default(false);
+            $table->boolean('is_required')->default(false);
+            $table->boolean('is_multiple')->default(false);
+            $table->boolean('show_on_detail')->default(false);
+            $table->boolean('show_on_card')->default(false);
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('team_id')->nullable()->index();
+            $table->timestamps();
+            $table->unique(['team_id', 'type', 'slug'], 'taxonomies_team_type_slug_unique');
+            $table->index(['team_id', 'type', 'name'], 'taxonomies_team_type_name_index');
+        });
+
+        Schema::create('taxonomy_items', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('taxonomy_id')->constrained('taxonomies')->cascadeOnDelete();
+            $table->string('name');
+            $table->string('slug');
+            $table->text('description')->nullable();
+            $table->unsignedInteger('sort_order')->default(0);
+            $table->unsignedInteger('position')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->unsignedBigInteger('team_id')->nullable()->index();
+            $table->timestamps();
+            $table->unique(['taxonomy_id', 'slug'], 'taxonomy_items_taxonomy_slug_unique');
+            $table->index(['team_id', 'taxonomy_id', 'position'], 'taxonomy_items_team_taxonomy_position_index');
+        });
+
+        Schema::create('taxonomyables', function (Blueprint $table) use ($withPivotTenantColumn, $withTenantAwarePivotUnique): void {
+            $table->id();
+            $table->foreignId('taxonomy_item_id')->constrained('taxonomy_items')->cascadeOnDelete();
+            $table->unsignedBigInteger('taxonomyable_id');
+            $table->string('taxonomyable_type');
+
+            if ($withPivotTenantColumn) {
+                $table->unsignedBigInteger('team_id')->nullable()->index();
+            }
+
+            $table->timestamps();
+            $table->index(['taxonomyable_type', 'taxonomyable_id'], 'taxonomyables_morph_index');
+
+            if ($withPivotTenantColumn && $withTenantAwarePivotUnique) {
+                $table->unique(
+                    ['taxonomy_item_id', 'taxonomyable_type', 'taxonomyable_id', 'team_id'],
+                    'taxonomyables_unique'
+                );
+            } else {
+                $table->unique(
+                    ['taxonomy_item_id', 'taxonomyable_type', 'taxonomyable_id'],
+                    'taxonomyables_unique'
+                );
+            }
+        });
+
+        config()->set('taxonomy.tenancy.enabled', true);
+        config()->set('taxonomy.tenancy.column', 'team_id');
+        config()->set('taxonomy.tenancy.apply_global_scope', true);
+        config()->set('taxonomy.tenancy.fail_when_unresolved', true);
+        config()->set('taxonomy.tenancy.require_pivot_tenant_column', $withPivotTenantColumn);
+
+        foreach ($configOverrides as $key => $value) {
+            config()->set("taxonomy.tenancy.{$key}", $value);
+        }
+
+        TaxonomyModels::clearColumnExistsCache();
     }
 }

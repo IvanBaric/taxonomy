@@ -17,6 +17,8 @@ class TenantScope implements Scope
             return;
         }
 
+        TaxonomyModels::assertTenantColumnExists($model->getTable());
+
         $tenantKey = TaxonomyModels::resolveTenantKey();
 
         if ($tenantKey === null || $tenantKey === '') {

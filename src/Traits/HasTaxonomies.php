@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use IvanBaric\Taxonomy\Exceptions\InvalidTaxonomyAssignmentException;
 use IvanBaric\Taxonomy\Exceptions\UnresolvedTenantException;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 
@@ -30,15 +31,19 @@ trait HasTaxonomies
         }
 
         $tenantKey = TaxonomyModels::resolveTenantKey();
-        $column = TaxonomyModels::tenantColumn();
-
-        $relation->withPivot($column);
 
         if ($tenantKey === null || $tenantKey === '') {
             return $relation->whereRaw('1 = 0');
         }
 
-        return $relation->wherePivot($column, $tenantKey);
+        if (! TaxonomyModels::requirePivotTenantColumn()) {
+            return $relation;
+        }
+
+        $column = TaxonomyModels::tenantColumn();
+        TaxonomyModels::assertPivotTenantColumnExists();
+
+        return $relation->withPivot($column)->wherePivot($column, $tenantKey);
     }
 
     public function taxonomy(string $type): MorphToMany
@@ -51,53 +56,39 @@ trait HasTaxonomies
 
     public function attachTaxonomy(string $type, mixed $items): static
     {
-        $ids = $this->resolveItemIds($type, $items);
+        $tenantKey = $this->tenantKeyForWrite('attach');
+        $resolution = $this->resolveItemIds($type, $items);
+        $ids = $resolution['ids'];
 
         if ($ids === []) {
             return $this;
         }
 
-        $attachPayload = [];
-
-        if (TaxonomyModels::tenancyEnabled()) {
-            $tenantKey = TaxonomyModels::resolveTenantKey();
-
-            if ($tenantKey === null || $tenantKey === '') {
-                throw UnresolvedTenantException::forAttach();
-            }
-
-            $column = TaxonomyModels::tenantColumn();
-
-            foreach ($ids as $id) {
-                $attachPayload[$id] = [$column => $tenantKey];
-            }
-        } else {
-            foreach ($ids as $id) {
-                $attachPayload[$id] = [];
-            }
-        }
-
-        $this->taxonomyItemsRelation()->syncWithoutDetaching($attachPayload);
+        $this->taxonomyItemsRelationForWrite($tenantKey)->syncWithoutDetaching(
+            $this->buildAttachPayload($ids, $tenantKey)
+        );
 
         return $this;
     }
 
     public function detachTaxonomy(string $type, mixed $items = null): static
     {
+        $tenantKey = $this->tenantKeyForWrite('detach');
+
         if ($items === null) {
             $currentIds = $this->taxonomy($type)->pluck('taxonomy_items.id')->all();
 
             if ($currentIds !== []) {
-                $this->taxonomyItemsRelation()->detach($currentIds);
+                $this->taxonomyItemsRelationForWrite($tenantKey)->detach($currentIds);
             }
 
             return $this;
         }
 
-        $ids = $this->resolveItemIds($type, $items);
+        $ids = $this->resolveItemIds($type, $items)['ids'];
 
         if ($ids !== []) {
-            $this->taxonomyItemsRelation()->detach($ids);
+            $this->taxonomyItemsRelationForWrite($tenantKey)->detach($ids);
         }
 
         return $this;
@@ -105,18 +96,39 @@ trait HasTaxonomies
 
     public function syncTaxonomy(string $type, mixed $items): static
     {
-        $targetIds = $this->resolveItemIds($type, $items);
+        $tenantKey = $this->tenantKeyForWrite('sync');
         $currentIds = $this->taxonomy($type)->pluck('taxonomy_items.id')->all();
+        $resolution = $this->resolveItemIds($type, $items);
+
+        if ($resolution['explicit_empty']) {
+            if ($currentIds !== []) {
+                $this->taxonomyItemsRelationForWrite($tenantKey)->detach($currentIds);
+            }
+
+            return $this;
+        }
+
+        if ($resolution['ids'] === [] && $resolution['invalid'] === []) {
+            return $this;
+        }
+
+        if ($resolution['ids'] === [] && $resolution['invalid'] !== []) {
+            return $this;
+        }
+
+        $targetIds = $resolution['ids'];
 
         $toAttach = array_values(array_diff($targetIds, $currentIds));
         $toDetach = array_values(array_diff($currentIds, $targetIds));
 
         if ($toAttach !== []) {
-            $this->attachTaxonomy($type, $toAttach);
+            $this->taxonomyItemsRelationForWrite($tenantKey)->syncWithoutDetaching(
+                $this->buildAttachPayload($toAttach, $tenantKey)
+            );
         }
 
         if ($toDetach !== []) {
-            $this->taxonomyItemsRelation()->detach($toDetach);
+            $this->taxonomyItemsRelationForWrite($tenantKey)->detach($toDetach);
         }
 
         return $this;
@@ -124,7 +136,7 @@ trait HasTaxonomies
 
     public function hasTaxonomy(string $type, mixed $item): bool
     {
-        $ids = $this->resolveItemIds($type, $item);
+        $ids = $this->resolveItemIds($type, $item, false)['ids'];
 
         if ($ids === []) {
             return false;
@@ -133,28 +145,47 @@ trait HasTaxonomies
         return $this->taxonomy($type)->whereIn('taxonomy_items.id', $ids)->exists();
     }
 
-    protected function resolveItemIds(string $type, mixed $items): array
+    /**
+     * @return array{ids: array<int, int>, invalid: array<int, string>, explicit_empty: bool}
+     */
+    protected function resolveItemIds(string $type, mixed $items, bool $throwOnInvalid = true): array
     {
+        $explicitEmpty = $this->isExplicitEmptyInput($items);
         $flat = $this->flattenInputs($items);
 
         if ($flat === []) {
-            return [];
+            return [
+                'ids' => [],
+                'invalid' => [],
+                'explicit_empty' => $explicitEmpty,
+            ];
         }
 
         $taxonomyItemModel = TaxonomyModels::taxonomyItem();
         $ids = [];
         $idCandidates = [];
         $slugCandidates = [];
+        $invalid = [];
 
         foreach ($flat as $value) {
             if ($value instanceof Model && $value instanceof $taxonomyItemModel) {
-                $idCandidates[] = (int) $value->getKey();
+                $key = $value->getKey();
+
+                if ($key === null) {
+                    $invalid[] = $this->describeInput($value);
+                } else {
+                    $idCandidates[(int) $key] = $this->describeInput($value);
+                }
 
                 continue;
             }
 
             if (is_int($value)) {
-                $idCandidates[] = $value;
+                if ($value > 0) {
+                    $idCandidates[$value] = (string) $value;
+                } else {
+                    $invalid[] = (string) $value;
+                }
 
                 continue;
             }
@@ -162,34 +193,83 @@ trait HasTaxonomies
             if (is_string($value)) {
                 $trimmed = trim($value);
 
-                if ($trimmed !== '') {
-                    $slugCandidates[] = Str::slug($trimmed);
+                if ($trimmed === '') {
+                    continue;
                 }
+
+                if (ctype_digit($trimmed)) {
+                    $integerValue = (int) $trimmed;
+
+                    if ($integerValue > 0) {
+                        $idCandidates[$integerValue] = $trimmed;
+                    } else {
+                        $invalid[] = $trimmed;
+                    }
+                } else {
+                    $slugCandidates[Str::slug($trimmed)] = $trimmed;
+                }
+
+                continue;
+            }
+
+            if ($value !== null) {
+                $invalid[] = $this->describeInput($value);
             }
         }
 
-        $itemQuery = $taxonomyItemModel::query()
-            ->whereHas('taxonomy', fn (Builder $query) => $query->where('type', $type));
+        $itemQuery = $this->taxonomyItemLookupQuery($type);
 
         if ($idCandidates !== []) {
-            $ids = array_merge(
-                $ids,
-                (clone $itemQuery)->whereIn('id', array_unique($idCandidates))->pluck('id')->all()
-            );
+            $validIds = (clone $itemQuery)
+                ->whereIn('id', array_keys($idCandidates))
+                ->pluck('id')
+                ->map(static fn (mixed $id): int => (int) $id)
+                ->all();
+
+            $ids = array_merge($ids, $validIds);
+
+            foreach (array_diff(array_keys($idCandidates), $validIds) as $invalidId) {
+                $invalid[] = $idCandidates[$invalidId];
+            }
         }
 
         if ($slugCandidates !== []) {
+            $validSlugRows = (clone $itemQuery)
+                ->whereIn('slug', array_keys($slugCandidates))
+                ->get(['id', 'slug']);
+
             $ids = array_merge(
                 $ids,
-                (clone $itemQuery)->whereIn('slug', array_unique($slugCandidates))->pluck('id')->all()
+                $validSlugRows->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all()
             );
+
+            $validSlugs = $validSlugRows->pluck('slug')->all();
+
+            foreach (array_diff(array_keys($slugCandidates), $validSlugs) as $invalidSlug) {
+                $invalid[] = $slugCandidates[$invalidSlug];
+            }
         }
 
-        return array_values(array_unique(array_map('intval', $ids)));
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $invalid = array_values(array_unique($invalid));
+
+        if ($throwOnInvalid && $invalid !== [] && TaxonomyModels::throwsOnInvalidAssignment()) {
+            throw InvalidTaxonomyAssignmentException::forType($type, $invalid);
+        }
+
+        return [
+            'ids' => $ids,
+            'invalid' => $invalid,
+            'explicit_empty' => $explicitEmpty,
+        ];
     }
 
     protected function flattenInputs(mixed $items): array
     {
+        if ($items === null) {
+            return [];
+        }
+
         if ($items instanceof Collection) {
             $items = $items->all();
         }
@@ -216,5 +296,129 @@ trait HasTaxonomies
         }
 
         return $result;
+    }
+
+    protected function taxonomyItemsRelationForWrite(int|string|null $tenantKey = null): MorphToMany
+    {
+        /** @var Model $this */
+        $relation = $this->morphToMany(
+            TaxonomyModels::taxonomyItem(),
+            'taxonomyable',
+            'taxonomyables',
+            'taxonomyable_id',
+            'taxonomy_item_id'
+        )->withTimestamps();
+
+        if (! TaxonomyModels::tenancyEnabled()) {
+            return $relation;
+        }
+
+        if (! TaxonomyModels::requirePivotTenantColumn()) {
+            return $relation;
+        }
+
+        $tenantKey ??= $this->tenantKeyForWrite('attach');
+
+        $column = TaxonomyModels::tenantColumn();
+        TaxonomyModels::assertPivotTenantColumnExists();
+
+        return $relation->withPivot($column)->wherePivot($column, $tenantKey);
+    }
+
+    protected function tenantKeyForWrite(string $operation): int|string|null
+    {
+        if (! TaxonomyModels::tenancyEnabled()) {
+            return null;
+        }
+
+        $tenantKey = TaxonomyModels::resolveTenantKey();
+
+        if ($tenantKey !== null && $tenantKey !== '') {
+            return $tenantKey;
+        }
+
+        return match ($operation) {
+            'attach' => throw UnresolvedTenantException::forAttach(),
+            'detach' => throw UnresolvedTenantException::forDetach(),
+            'sync' => throw UnresolvedTenantException::forSync(),
+            default => throw UnresolvedTenantException::forAttach(),
+        };
+    }
+
+    /**
+     * @param array<int, int> $ids
+     * @return array<int, array<string, int|string>>
+     */
+    protected function buildAttachPayload(array $ids, int|string|null $tenantKey): array
+    {
+        $payload = [];
+
+        foreach ($ids as $id) {
+            $payload[$id] = [];
+        }
+
+        if (! TaxonomyModels::tenancyEnabled() || ! TaxonomyModels::requirePivotTenantColumn()) {
+            return $payload;
+        }
+
+        $column = TaxonomyModels::tenantColumn();
+
+        foreach ($ids as $id) {
+            $payload[$id] = [$column => $tenantKey];
+        }
+
+        return $payload;
+    }
+
+    protected function taxonomyItemLookupQuery(string $type): Builder
+    {
+        $taxonomyItemModel = TaxonomyModels::taxonomyItem();
+        $query = $taxonomyItemModel::query()
+            ->whereHas('taxonomy', fn (Builder $taxonomyQuery) => $taxonomyQuery->where('type', $type));
+
+        if (! TaxonomyModels::tenancyEnabled()) {
+            return $query;
+        }
+
+        $tenantKey = TaxonomyModels::resolveTenantKey();
+
+        if ($tenantKey === null || $tenantKey === '') {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $column = TaxonomyModels::tenantColumn();
+        TaxonomyModels::assertTenantColumnExists((new $taxonomyItemModel())->getTable());
+
+        return $query->where($column, $tenantKey);
+    }
+
+    protected function isExplicitEmptyInput(mixed $items): bool
+    {
+        if ($items instanceof Collection) {
+            return $items->isEmpty();
+        }
+
+        return is_array($items) && $items === [];
+    }
+
+    protected function describeInput(mixed $value): string
+    {
+        if ($value instanceof Model) {
+            $key = $value->getKey();
+
+            return $key === null
+                ? $value::class.'(unsaved)'
+                : $value::class.'#'.$key;
+        }
+
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value) || is_bool($value)) {
+            return (string) $value;
+        }
+
+        return get_debug_type($value);
     }
 }

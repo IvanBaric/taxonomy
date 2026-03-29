@@ -27,6 +27,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Invalid assignment behavior
+    |--------------------------------------------------------------------------
+    |
+    | Controls what happens when HasTaxonomies receives inputs that do not
+    | resolve to items inside the requested taxonomy type.
+    |
+    | silent = ignore invalid references and only use valid matches
+    | throw  = raise an explicit package exception
+    |
+    | The default stays "silent" for backward compatibility.
+    |
+    */
+    'invalid_assignment_behavior' => 'silent',
+
+    /*
+    |--------------------------------------------------------------------------
     | Optional tenancy support
     |--------------------------------------------------------------------------
     |
@@ -66,6 +82,8 @@ return [
         // false = package will not auto-fill the tenancy column
         //
         // Reads are still fail-closed when tenant cannot be resolved.
+        // attachTaxonomy(), syncTaxonomy(), and detachTaxonomy() always require
+        // a resolved tenant when tenancy is enabled.
         'fail_when_unresolved' => true,
 
         // Optional resolver responsible for returning the current tenant key.
@@ -85,5 +103,10 @@ return [
         // Keep it null unless your app wants a concrete model reference for
         // custom relations or helper logic.
         'tenant_model' => null,
+
+        // When tenancy is enabled, the pivot table must also contain the same
+        // tenant column so attach/sync/detach operations stay tenant-safe.
+        // This package treats pivot isolation as mandatory for multi-tenant use.
+        'require_pivot_tenant_column' => true,
     ],
 ];

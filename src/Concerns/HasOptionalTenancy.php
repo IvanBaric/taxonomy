@@ -21,6 +21,8 @@ trait HasOptionalTenancy
                 return;
             }
 
+            TaxonomyModels::assertTenantColumnExists($model->getTable());
+
             $column = TaxonomyModels::tenantColumn();
 
             if ($model->getAttribute($column) !== null) {
