@@ -64,8 +64,34 @@ $post->hasTaxonomy('blog', 'laravel');
 
 The core tables are intentionally minimal:
 - `taxonomies`: `id`, `name`, `slug`, `type`, `description`, `is_filterable`, `is_multiple`, timestamps
-- `taxonomy_items`: `id`, `taxonomy_id`, `name`, `slug`, `description`, `position`, timestamps
+- `taxonomy_items`: `id`, `taxonomy_id`, `name`, `slug`, `description`, `meta`, `position`, timestamps
 - `taxonomyables`: `id`, `taxonomy_item_id`, `taxonomyable_id`, `taxonomyable_type`, timestamps
+
+## Meta column
+Each taxonomy item supports an optional `meta` JSON column for host-app specific attributes that don't warrant separate columns or tables.
+
+```php
+$taxonomy = Taxonomy::create(['name' => 'Ingredients', 'type' => 'ingredients']);
+
+$taxonomy->items()->create([
+    'name' => 'Wheat flour',
+    'meta' => [
+        'is_allergen' => true,
+        'allergen_type' => 'gluten',
+    ],
+]);
+
+$item = TaxonomyItem::forType('ingredients')->first();
+$item->meta['is_allergen']; // true
+```
+
+The `meta` column is cast to an array automatically. Use it for:
+
+- Boolean flags (`is_allergen`, `is_featured`)
+- Display attributes (`icon`, `color`)
+- Lightweight metadata that doesn't need indexing or relations
+
+For data that needs querying performance, indexing, or referential integrity, prefer dedicated columns or tables in the host app.
 
 ## Accepted item inputs
 `HasTaxonomies` accepts:

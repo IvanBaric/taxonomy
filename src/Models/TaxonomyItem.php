@@ -23,11 +23,13 @@ class TaxonomyItem extends Model
         'name',
         'slug',
         'description',
+        'meta',
         'position',
     ];
 
     protected $casts = [
         'id' => 'int',
+        'meta' => 'array',
         'position' => 'int',
     ];
 

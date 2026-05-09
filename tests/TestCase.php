@@ -81,6 +81,7 @@ abstract class TestCase extends Orchestra
             $table->string('name');
             $table->string('slug');
             $table->text('description')->nullable();
+            $table->json('meta')->nullable();
             $table->unsignedInteger('sort_order')->default(0);
             $table->unsignedInteger('position')->default(0);
             $table->boolean('is_active')->default(true);
@@ -154,6 +155,7 @@ abstract class TestCase extends Orchestra
             $table->string('name');
             $table->string('slug');
             $table->text('description')->nullable();
+            $table->json('meta')->nullable();
             $table->unsignedInteger('sort_order')->default(0);
             $table->unsignedInteger('position')->default(0);
             $table->boolean('is_active')->default(true);

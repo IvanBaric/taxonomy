@@ -29,6 +29,7 @@ return new class extends Migration {
             $table->string('name');
             $table->string('slug');
             $table->text('description')->nullable();
+            $table->json('meta')->nullable();
             $table->unsignedInteger('position')->default(0);
             $table->timestamps();
 
