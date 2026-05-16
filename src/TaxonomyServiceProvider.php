@@ -16,6 +16,7 @@ class TaxonomyServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'taxonomy');
 
         if (! $this->app->runningInConsole()) {
             return;
@@ -28,5 +29,9 @@ class TaxonomyServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'taxonomy-migrations');
+
+        $this->publishes([
+            __DIR__.'/../resources/views' => resource_path('views/vendor/taxonomy'),
+        ], 'taxonomy-views');
     }
 }

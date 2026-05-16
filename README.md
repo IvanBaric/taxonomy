@@ -10,9 +10,10 @@ It provides:
 - the `HasTaxonomies` attachment trait
 - config-driven model overrides
 - optional tenancy hooks
+- optional Flux Blade field components for admin forms
 
 It does not provide:
-- admin UI
+- a full admin UI
 - media integration
 - translatable integration
 - SEO/status systems
@@ -28,6 +29,7 @@ Optional publish steps:
 ```bash
 php artisan vendor:publish --tag=taxonomy-config
 php artisan vendor:publish --tag=taxonomy-migrations
+php artisan vendor:publish --tag=taxonomy-views
 ```
 
 Composer constraints and the package test suite cover:
@@ -121,6 +123,53 @@ You can also filter one taxonomy directly:
 Car::query()->withTaxonomy('brand', 'audi')->get();
 Car::query()->withTaxonomy('feature', ['navigation', 'camera'], operator: 'all')->get();
 ```
+
+## Flux Field Component
+
+The package ships an optional Flux Blade component for rendering one taxonomy field in an admin form. It supports single-value `flux:select`, multi-value `flux:pillbox`, searchable options, and a Flux modal for adding a new taxonomy item without leaving the form. Use this component only in host apps that already install Flux.
+
+```blade
+@foreach ($taxonomyFields as $field)
+    <x-taxonomy::field :field="$field" />
+@endforeach
+```
+
+By default, the component expects these Livewire properties and method on the current component:
+
+```php
+public array $taxonomy = [];
+public array $taxonomySearch = [];
+
+public function createTaxonomyOption(string $type): void
+{
+    // Create or resolve the item, then set:
+    // $this->taxonomy[$type] = $item->id for single fields
+    // $this->taxonomy[$type][] = $item->id for multi fields
+}
+```
+
+The default bindings are:
+- selected values: `taxonomy.{type}`
+- modal input/search text: `taxonomySearch.{type}`
+- create method: `createTaxonomyOption('{type}')`
+- modal name: `create-taxonomy-{type}`
+- search placeholder: `Traži`
+
+You can customize those conventions:
+
+```blade
+<x-taxonomy::field
+    :field="$field"
+    model-prefix="vehicleTaxonomy"
+    search-prefix="newTaxonomyItem"
+    create-method="createVehicleTaxonomyOption"
+    modal-prefix="vehicle-taxonomy-"
+    :search-placeholder="__('Traži')"
+    :create-label="__('Dodaj novi unos')"
+/>
+```
+
+Publish `taxonomy-views` if a project needs a different layout, copy, or UI library.
 
 The core tables are intentionally minimal:
 - `taxonomies`: `id`, `name`, `slug`, `type`, `description`, `is_filterable`, `is_multiple`, timestamps
