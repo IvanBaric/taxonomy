@@ -1,6 +1,6 @@
 # ivanbaric/taxonomy
 
-Generic taxonomy package for Laravel 11/12/13. The package core stays intentionally small: two models, one polymorphic attachment trait, minimal migrations, config-driven model resolution, and optional tenancy hooks.
+Generic taxonomy package for Laravel 11/12/13. The package core stays intentionally small: two models, one polymorphic attachment trait, minimal migrations, config-driven model resolution, optional tenancy hooks, and generic taxonomy filtering scopes.
 
 ## Scope
 This package is a reusable taxonomy core.
@@ -60,6 +60,66 @@ $item = $taxonomy->items()->create([
 
 $post->attachTaxonomy('blog', $item);
 $post->hasTaxonomy('blog', 'laravel');
+```
+
+## Dynamic filtering
+Models using `HasTaxonomies` get a public `taxonomyItems()` relation and generic query scopes for runtime-defined filters. This is useful for catalogs where admins can add new filterable taxonomies without changing application code.
+
+```php
+use App\Models\Car;
+
+$cars = Car::query()
+    ->withTaxonomyFilters([
+        'brand' => 'audi',
+        'fuel' => ['diesel', 'electric'],
+        'feature' => [
+            'operator' => 'all',
+            'items' => ['navigation', 'camera'],
+        ],
+    ])
+    ->paginate();
+```
+
+The example above means:
+- `brand` must be `audi`
+- `fuel` can be `diesel` or `electric`
+- `feature` must contain both `navigation` and `camera`
+
+For request-driven catalogs, keep the request shape generic:
+
+```text
+/cars?taxonomies[brand]=audi
+/cars?taxonomies[fuel][]=diesel&taxonomies[fuel][]=electric
+/cars?taxonomies[feature][operator]=all&taxonomies[feature][items][]=navigation&taxonomies[feature][items][]=camera
+```
+
+Then pass the request map directly:
+
+```php
+$cars = Car::query()
+    ->visible()
+    ->withTaxonomyFilters($request->input('taxonomies', []))
+    ->latest()
+    ->paginate(24)
+    ->withQueryString();
+```
+
+`withTaxonomyFilters()` only applies taxonomies where `is_filterable = true` by default. Unknown or non-filterable taxonomy types are ignored, which keeps public filtering whitelist-driven by database metadata.
+
+For internal/admin queries, you can opt out of that guard:
+
+```php
+$cars = Car::query()->withTaxonomyFilters(
+    filters: ['internal_badge' => 'featured'],
+    onlyFilterable: false,
+)->get();
+```
+
+You can also filter one taxonomy directly:
+
+```php
+Car::query()->withTaxonomy('brand', 'audi')->get();
+Car::query()->withTaxonomy('feature', ['navigation', 'camera'], operator: 'all')->get();
 ```
 
 The core tables are intentionally minimal:
@@ -198,6 +258,9 @@ The host app must also publish and adjust indexes/unique constraints for that sc
 - `HasTaxonomies::detachTaxonomy(string $type, mixed $items = null)`
 - `HasTaxonomies::syncTaxonomy(string $type, mixed $items)`
 - `HasTaxonomies::hasTaxonomy(string $type, mixed $item)`
+- `HasTaxonomies::taxonomyItems()`
+- `HasTaxonomies::withTaxonomy(string $type, mixed $items, string $operator = 'any', bool $onlyFilterable = false)`
+- `HasTaxonomies::withTaxonomyFilters(array $filters, string $defaultOperator = 'any', bool $onlyFilterable = true)`
 
 ## Extensibility boundary
 Package core owns:

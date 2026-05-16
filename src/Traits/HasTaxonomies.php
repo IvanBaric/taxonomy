@@ -46,12 +46,76 @@ trait HasTaxonomies
         return $relation->withPivot($column)->wherePivot($column, $tenantKey);
     }
 
+    public function taxonomyItems(): MorphToMany
+    {
+        return $this->taxonomyItemsRelation();
+    }
+
     public function taxonomy(string $type): MorphToMany
     {
         return $this->taxonomyItemsRelation()
             ->whereHas('taxonomy', fn (Builder $query) => $query->where('type', $type))
             ->orderBy('position')
             ->orderBy('name');
+    }
+
+    public function scopeWithTaxonomy(
+        Builder $query,
+        string $type,
+        mixed $items,
+        string $operator = 'any',
+        bool $onlyFilterable = false
+    ): Builder {
+        $values = $this->normalizeTaxonomyFilterValues($items);
+
+        if ($values === []) {
+            return $query;
+        }
+
+        if ($onlyFilterable && ! $this->taxonomyTypeIsFilterable($type)) {
+            return $query;
+        }
+
+        $operator = strtolower($operator) === 'all' ? 'all' : 'any';
+
+        if ($operator === 'all') {
+            foreach ($values as $value) {
+                $query->whereHas('taxonomyItems', fn (Builder $itemQuery) => $this->applyTaxonomyItemFilter(
+                    $itemQuery,
+                    $type,
+                    [$value],
+                    $onlyFilterable
+                ));
+            }
+
+            return $query;
+        }
+
+        return $query->whereHas('taxonomyItems', fn (Builder $itemQuery) => $this->applyTaxonomyItemFilter(
+            $itemQuery,
+            $type,
+            $values,
+            $onlyFilterable
+        ));
+    }
+
+    public function scopeWithTaxonomyFilters(
+        Builder $query,
+        array $filters,
+        string $defaultOperator = 'any',
+        bool $onlyFilterable = true
+    ): Builder {
+        foreach ($filters as $type => $filter) {
+            if (! is_string($type) || trim($type) === '') {
+                continue;
+            }
+
+            [$items, $operator] = $this->parseTaxonomyFilter($filter, $defaultOperator);
+
+            $query->withTaxonomy($type, $items, $operator, $onlyFilterable);
+        }
+
+        return $query;
     }
 
     public function attachTaxonomy(string $type, mixed $items): static
@@ -346,7 +410,7 @@ trait HasTaxonomies
     }
 
     /**
-     * @param array<int, int> $ids
+     * @param  array<int, int>  $ids
      * @return array<int, array<string, int|string>>
      */
     protected function buildAttachPayload(array $ids, int|string|null $tenantKey): array
@@ -387,7 +451,7 @@ trait HasTaxonomies
         }
 
         $column = TaxonomyModels::tenantColumn();
-        TaxonomyModels::assertTenantColumnExists((new $taxonomyItemModel())->getTable());
+        TaxonomyModels::assertTenantColumnExists((new $taxonomyItemModel)->getTable());
 
         return $query->where($column, $tenantKey);
     }
@@ -420,5 +484,98 @@ trait HasTaxonomies
         }
 
         return get_debug_type($value);
+    }
+
+    protected function parseTaxonomyFilter(mixed $filter, string $defaultOperator): array
+    {
+        if (! is_array($filter)) {
+            return [$filter, $defaultOperator];
+        }
+
+        $items = $filter['items'] ?? $filter['values'] ?? $filter['value'] ?? $filter;
+        $operator = is_string($filter['operator'] ?? null)
+            ? (string) $filter['operator']
+            : $defaultOperator;
+
+        return [$items, $operator];
+    }
+
+    protected function taxonomyTypeIsFilterable(string $type): bool
+    {
+        $taxonomyModel = TaxonomyModels::taxonomy();
+
+        return $taxonomyModel::query()
+            ->where('type', $type)
+            ->where('is_filterable', true)
+            ->exists();
+    }
+
+    protected function normalizeTaxonomyFilterValues(mixed $items): array
+    {
+        $values = [];
+        $taxonomyItemModel = TaxonomyModels::taxonomyItem();
+
+        foreach ($this->flattenInputs($items) as $item) {
+            if ($item instanceof Model && $item instanceof $taxonomyItemModel) {
+                $values[] = ['id' => (int) $item->getKey()];
+
+                continue;
+            }
+
+            if (is_int($item)) {
+                $values[] = ['id' => $item];
+
+                continue;
+            }
+
+            if (is_string($item)) {
+                $trimmed = trim($item);
+
+                if ($trimmed !== '') {
+                    $values[] = ['slug' => Str::slug($trimmed)];
+                }
+            }
+        }
+
+        return array_values(array_unique($values, SORT_REGULAR));
+    }
+
+    protected function applyTaxonomyItemFilter(
+        Builder $query,
+        string $type,
+        array $values,
+        bool $onlyFilterable
+    ): void {
+        $taxonomyItemModel = TaxonomyModels::taxonomyItem();
+        $taxonomyItemTable = (new $taxonomyItemModel)->getTable();
+
+        $query
+            ->whereHas('taxonomy', function (Builder $taxonomyQuery) use ($type, $onlyFilterable): void {
+                $taxonomyQuery
+                    ->where('type', $type)
+                    ->when($onlyFilterable, fn (Builder $query) => $query->where('is_filterable', true));
+            })
+            ->where(function (Builder $valueQuery) use ($values, $taxonomyItemTable): void {
+                $ids = [];
+                $slugs = [];
+
+                foreach ($values as $value) {
+                    if (isset($value['id'])) {
+                        $ids[] = (int) $value['id'];
+                    }
+
+                    if (isset($value['slug'])) {
+                        $slugs[] = (string) $value['slug'];
+                    }
+                }
+
+                $valueQuery
+                    ->when($ids !== [], fn (Builder $query) => $query->whereIn($taxonomyItemTable.'.id', array_unique($ids)))
+                    ->when($slugs !== [], function (Builder $query) use ($slugs, $ids, $taxonomyItemTable): void {
+                        $method = $ids === [] ? 'whereIn' : 'orWhereIn';
+
+                        $query->{$method}($taxonomyItemTable.'.slug', array_unique($slugs));
+                    });
+            });
     }
 }
