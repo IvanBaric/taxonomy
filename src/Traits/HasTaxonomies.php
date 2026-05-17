@@ -26,6 +26,11 @@ trait HasTaxonomies
             'taxonomy_item_id'
         )->withTimestamps();
 
+        $this->applyActiveConstraint($relation, TaxonomyModels::taxonomyItem(), 'taxonomy_item_column');
+        $relation->whereHas('taxonomy', function (Builder $query): void {
+            $this->applyActiveConstraint($query, TaxonomyModels::taxonomy(), 'taxonomy_column');
+        });
+
         if (! TaxonomyModels::tenancyEnabled()) {
             return $relation;
         }
@@ -438,7 +443,12 @@ trait HasTaxonomies
     {
         $taxonomyItemModel = TaxonomyModels::taxonomyItem();
         $query = $taxonomyItemModel::query()
-            ->whereHas('taxonomy', fn (Builder $taxonomyQuery) => $taxonomyQuery->where('type', $type));
+            ->whereHas('taxonomy', function (Builder $taxonomyQuery) use ($type): void {
+                $taxonomyQuery->where('type', $type);
+                $this->applyActiveConstraint($taxonomyQuery, TaxonomyModels::taxonomy(), 'taxonomy_column');
+            });
+
+        $this->applyActiveConstraint($query, $taxonomyItemModel, 'taxonomy_item_column');
 
         if (! TaxonomyModels::tenancyEnabled()) {
             return $query;
@@ -503,11 +513,13 @@ trait HasTaxonomies
     protected function taxonomyTypeIsFilterable(string $type): bool
     {
         $taxonomyModel = TaxonomyModels::taxonomy();
-
-        return $taxonomyModel::query()
+        $query = $taxonomyModel::query()
             ->where('type', $type)
-            ->where('is_filterable', true)
-            ->exists();
+            ->where('is_filterable', true);
+
+        $this->applyActiveConstraint($query, $taxonomyModel, 'taxonomy_column');
+
+        return $query->exists();
     }
 
     protected function normalizeTaxonomyFilterValues(mixed $items): array
@@ -549,11 +561,15 @@ trait HasTaxonomies
         $taxonomyItemModel = TaxonomyModels::taxonomyItem();
         $taxonomyItemTable = (new $taxonomyItemModel)->getTable();
 
+        $this->applyActiveConstraint($query, $taxonomyItemModel, 'taxonomy_item_column');
+
         $query
             ->whereHas('taxonomy', function (Builder $taxonomyQuery) use ($type, $onlyFilterable): void {
                 $taxonomyQuery
                     ->where('type', $type)
                     ->when($onlyFilterable, fn (Builder $query) => $query->where('is_filterable', true));
+
+                $this->applyActiveConstraint($taxonomyQuery, TaxonomyModels::taxonomy(), 'taxonomy_column');
             })
             ->where(function (Builder $valueQuery) use ($values, $taxonomyItemTable): void {
                 $ids = [];
@@ -577,5 +593,28 @@ trait HasTaxonomies
                         $query->{$method}($taxonomyItemTable.'.slug', array_unique($slugs));
                     });
             });
+    }
+
+    protected function applyActiveConstraint(Builder|MorphToMany $query, string $modelClass, string $columnConfigKey): void
+    {
+        $model = new $modelClass();
+
+        if (method_exists($model, 'scopeActive')) {
+            $query->active();
+
+            return;
+        }
+
+        if (! (bool) config('taxonomy.activity.enabled', false)) {
+            return;
+        }
+
+        $column = config('taxonomy.activity.'.$columnConfigKey);
+
+        if (! is_string($column) || trim($column) === '') {
+            return;
+        }
+
+        $query->where($model->getTable().'.'.$column, true);
     }
 }

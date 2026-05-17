@@ -1,6 +1,8 @@
 <?php
 
 declare(strict_types=1);
+use IvanBaric\Taxonomy\Models\Taxonomy;
+use IvanBaric\Taxonomy\Models\TaxonomyItem;
 
 return [
     /*
@@ -19,10 +21,10 @@ return [
     */
     'models' => [
         // Model for taxonomy groups such as "Categories", "Tags", "Attributes".
-        'taxonomy' => IvanBaric\Taxonomy\Models\Taxonomy::class,
+        'taxonomy' => Taxonomy::class,
 
         // Model for individual values inside a taxonomy such as "Laravel", "PHP", "Red".
-        'taxonomy_item' => IvanBaric\Taxonomy\Models\TaxonomyItem::class,
+        'taxonomy_item' => TaxonomyItem::class,
     ],
 
     /*
@@ -40,6 +42,25 @@ return [
     |
     */
     'invalid_assignment_behavior' => 'silent',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Optional active-state support
+    |--------------------------------------------------------------------------
+    |
+    | Keep this disabled for generic projects that do not have active/inactive
+    | taxonomy columns. If enabled, package read/filter queries will ignore
+    | inactive taxonomy groups and inactive taxonomy items.
+    |
+    | If your custom taxonomy models define a local active() scope, the package
+    | uses that scope first. Otherwise it falls back to these column names.
+    |
+    */
+    'activity' => [
+        'enabled' => false,
+        'taxonomy_column' => 'is_active',
+        'taxonomy_item_column' => 'is_active',
+    ],
 
     /*
     |--------------------------------------------------------------------------
