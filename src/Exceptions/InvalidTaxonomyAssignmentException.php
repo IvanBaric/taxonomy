@@ -9,7 +9,7 @@ use InvalidArgumentException;
 class InvalidTaxonomyAssignmentException extends InvalidArgumentException
 {
     /**
-     * @param array<int, string> $invalidReferences
+     * @param  array<int, string>  $invalidReferences
      */
     public static function forType(string $type, array $invalidReferences): self
     {

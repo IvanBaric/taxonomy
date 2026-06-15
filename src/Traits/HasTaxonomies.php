@@ -597,7 +597,7 @@ trait HasTaxonomies
 
     protected function applyActiveConstraint(Builder|MorphToMany $query, string $modelClass, string $columnConfigKey): void
     {
-        $model = new $modelClass();
+        $model = new $modelClass;
 
         if (method_exists($model, 'scopeActive')) {
             $query->active();

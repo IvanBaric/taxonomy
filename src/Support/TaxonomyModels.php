@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
 use IvanBaric\Taxonomy\Contracts\TenantResolver;
 use IvanBaric\Taxonomy\Exceptions\MisconfiguredTenancyException;
+use IvanBaric\Taxonomy\Models\Taxonomy;
+use IvanBaric\Taxonomy\Models\TaxonomyItem;
 
 class TaxonomyModels
 {
@@ -24,7 +26,7 @@ class TaxonomyModels
     public static function taxonomy(): string
     {
         /** @var class-string<Model> $model */
-        $model = config('taxonomy.models.taxonomy', \IvanBaric\Taxonomy\Models\Taxonomy::class);
+        $model = config('taxonomy.models.taxonomy', Taxonomy::class);
 
         return $model;
     }
@@ -32,7 +34,7 @@ class TaxonomyModels
     public static function taxonomyItem(): string
     {
         /** @var class-string<Model> $model */
-        $model = config('taxonomy.models.taxonomy_item', \IvanBaric\Taxonomy\Models\TaxonomyItem::class);
+        $model = config('taxonomy.models.taxonomy_item', TaxonomyItem::class);
 
         return $model;
     }

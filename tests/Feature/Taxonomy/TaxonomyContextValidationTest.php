@@ -64,4 +64,3 @@ it('allows attaching inactive taxonomy items (serious weakness for production)',
     // This is a gap: package has no built-in "active-only" constraints.
     expect($car->taxonomy('feature')->pluck('name')->all())->toContain('Navigation');
 });
-

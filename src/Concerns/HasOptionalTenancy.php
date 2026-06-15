@@ -13,7 +13,7 @@ trait HasOptionalTenancy
     public static function bootHasOptionalTenancy(): void
     {
         if (TaxonomyModels::tenancyEnabled() && TaxonomyModels::applyGlobalScope()) {
-            static::addGlobalScope(new TenantScope());
+            static::addGlobalScope(new TenantScope);
         }
 
         static::creating(function ($model): void {

@@ -112,7 +112,7 @@ class Taxonomy extends Model
         }
 
         if (TaxonomyModels::tenancyEnabled()) {
-            TaxonomyModels::assertTenantColumnExists((new static())->getTable());
+            TaxonomyModels::assertTenantColumnExists((new static)->getTable());
 
             $column = TaxonomyModels::tenantColumn();
             $tenantKey = $model?->getAttribute($column) ?? TaxonomyModels::resolveTenantKey();

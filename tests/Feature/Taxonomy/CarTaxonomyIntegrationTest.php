@@ -58,4 +58,3 @@ it('assigns taxonomies to cars and can display them grouped by context', functio
     expect($grouped['transmission'])->toBe(['Automatic']);
     expect($grouped['feature'])->toContain('Navigation', 'Camera');
 });
-

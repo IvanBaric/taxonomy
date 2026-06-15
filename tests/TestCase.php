@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace IvanBaric\Taxonomy\Tests;
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use IvanBaric\Taxonomy\Models\Taxonomy;
 use IvanBaric\Taxonomy\Models\TaxonomyItem;
-use Illuminate\Support\Facades\Schema;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 use IvanBaric\Taxonomy\TaxonomyServiceProvider;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\Car;

@@ -50,7 +50,7 @@ function invalidAssignmentFixture(): array
     return compact('post', 'brand', 'fuel', 'audi', 'bmw', 'diesel');
 }
 
-it('keeps invalid attach inputs silent by default', function (\Closure $makeInput): void {
+it('keeps invalid attach inputs silent by default', function (Closure $makeInput): void {
     $fixture = invalidAssignmentFixture();
 
     $fixture['post']->attachTaxonomy('brand', $makeInput($fixture));
@@ -58,7 +58,7 @@ it('keeps invalid attach inputs silent by default', function (\Closure $makeInpu
     expect($fixture['post']->taxonomy('brand')->pluck('name')->all())->toBe(['Audi']);
 })->with('invalid assignment inputs');
 
-it('throws explicit exceptions for invalid attach inputs when configured', function (\Closure $makeInput): void {
+it('throws explicit exceptions for invalid attach inputs when configured', function (Closure $makeInput): void {
     config()->set('taxonomy.invalid_assignment_behavior', 'throw');
 
     $fixture = invalidAssignmentFixture();
