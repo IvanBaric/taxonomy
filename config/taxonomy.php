@@ -107,17 +107,17 @@ return [
         // a resolved tenant when tenancy is enabled.
         'fail_when_unresolved' => true,
 
-        // Optional resolver responsible for returning the current tenant key.
+        // Resolver responsible for returning the current tenant key.
         // Expected result: int|string|null
         //
         // You can pass:
         // - a class name that implements IvanBaric\Taxonomy\Contracts\TenantResolver
         // - a resolver instance
-        // - null if you do not use package-level tenancy
+        // - null if you want to disable package-level resolution manually
         //
         // Example:
         // 'resolver' => App\Support\CurrentTeamResolver::class,
-        'resolver' => null,
+        'resolver' => IvanBaric\Taxonomy\Resolvers\CorexisTenantResolver::class,
 
         // Optional tenant model class.
         // This is NOT required for the package to work.
@@ -129,5 +129,24 @@ return [
         // tenant column so attach/sync/detach operations stay tenant-safe.
         // This package treats pivot isolation as mandatory for multi-tenant use.
         'require_pivot_tenant_column' => true,
+    ],
+
+    'permissions' => [
+        [
+            'name' => 'taxonomy',
+            'slug' => 'taxonomy',
+            'label' => 'taxonomy::permissions.group',
+            'description' => 'taxonomy::permissions.description',
+            'icon' => 'tags',
+            'sort_order' => 60,
+            'items' => [
+                ['name' => 'View', 'slug' => 'view', 'code' => 'taxonomy.view', 'label' => 'taxonomy::permissions.view', 'sort_order' => 10],
+                ['name' => 'Create', 'slug' => 'create', 'code' => 'taxonomy.create', 'label' => 'taxonomy::permissions.create', 'sort_order' => 20],
+                ['name' => 'Update', 'slug' => 'update', 'code' => 'taxonomy.update', 'label' => 'taxonomy::permissions.update', 'sort_order' => 30],
+                ['name' => 'Delete', 'slug' => 'delete', 'code' => 'taxonomy.delete', 'label' => 'taxonomy::permissions.delete', 'sort_order' => 40],
+                ['name' => 'Attach items', 'slug' => 'attach', 'code' => 'taxonomy.attach', 'label' => 'taxonomy::permissions.attach', 'sort_order' => 50],
+                ['name' => 'Sync items', 'slug' => 'sync', 'code' => 'taxonomy.sync', 'label' => 'taxonomy::permissions.sync', 'sort_order' => 60],
+            ],
+        ],
     ],
 ];

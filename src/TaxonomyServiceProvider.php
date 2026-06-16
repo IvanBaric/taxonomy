@@ -17,6 +17,7 @@ class TaxonomyServiceProvider extends ServiceProvider
     {
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'taxonomy');
+        $this->loadTranslationsFrom(__DIR__.'/../lang', 'taxonomy');
 
         if (! $this->app->runningInConsole()) {
             return;
@@ -33,5 +34,9 @@ class TaxonomyServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/../resources/views' => resource_path('views/vendor/taxonomy'),
         ], 'taxonomy-views');
+
+        $this->publishes([
+            __DIR__.'/../lang' => lang_path('vendor/taxonomy'),
+        ], 'taxonomy-translations');
     }
 }

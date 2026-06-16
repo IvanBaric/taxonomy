@@ -311,6 +311,31 @@ The host app must also publish and adjust indexes/unique constraints for that sc
 - `HasTaxonomies::withTaxonomy(string $type, mixed $items, string $operator = 'any', bool $onlyFilterable = false)`
 - `HasTaxonomies::withTaxonomyFilters(array $filters, string $defaultOperator = 'any', bool $onlyFilterable = true)`
 
+## Architecture
+
+The existing `HasTaxonomies` trait API remains stable. New package and UI code should use Actions for state-changing writes:
+
+```php
+use IvanBaric\Taxonomy\Actions\SyncTaxonomyItemsAction;
+
+$result = app(SyncTaxonomyItemsAction::class)->handle(
+    model: $post,
+    type: 'blog',
+    items: ['laravel', 'php'],
+);
+```
+
+Taxonomy Actions return `IvanBaric\Corexis\Data\ActionResult` and dispatch domain events that implement `IvanBaric\Corexis\Contracts\Events\DomainEvent`:
+
+- `TaxonomyCreated`
+- `TaxonomyUpdated`
+- `TaxonomyDeleted`
+- `TaxonomyItemAttached`
+- `TaxonomyItemDetached`
+- `TaxonomyItemsSynced`
+
+Actions stay model-agnostic. They do not know about pages, posts, products, SEO, gallery, audit, billing, or any host application model beyond the generic Eloquent model passed to attach/detach/sync operations.
+
 ## Extensibility boundary
 Package core owns:
 - generic models

@@ -6,6 +6,7 @@ namespace IvanBaric\Taxonomy\Tests;
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use IvanBaric\Corexis\CorexisServiceProvider;
 use IvanBaric\Taxonomy\Models\Taxonomy;
 use IvanBaric\Taxonomy\Models\TaxonomyItem;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
@@ -23,6 +24,7 @@ abstract class TestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
+            CorexisServiceProvider::class,
             TaxonomyServiceProvider::class,
         ];
     }
