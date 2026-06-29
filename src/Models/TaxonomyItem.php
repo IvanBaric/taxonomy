@@ -8,18 +8,21 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use IvanBaric\Corexis\Concerns\HasLockVersion;
 use IvanBaric\Taxonomy\Concerns\HasOptionalTenancy;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 
 class TaxonomyItem extends Model
 {
-    use HasOptionalTenancy;
+    use HasLockVersion, HasOptionalTenancy;
 
     protected $table = 'taxonomy_items';
 
     protected $fillable = [
         'taxonomy_id',
+        'uuid',
         'name',
         'slug',
         'description',
@@ -31,6 +34,7 @@ class TaxonomyItem extends Model
         'id' => 'int',
         'meta' => 'array',
         'position' => 'int',
+        'lock_version' => 'int',
     ];
 
     protected $attributes = [
@@ -40,6 +44,10 @@ class TaxonomyItem extends Model
     protected static function booted(): void
     {
         static::creating(function (self $model): void {
+            if (Schema::hasColumn($model->getTable(), 'uuid') && blank($model->uuid)) {
+                $model->uuid = (string) Str::uuid();
+            }
+
             if (! isset($model->slug) || trim((string) $model->slug) === '') {
                 $model->slug = static::generateUniqueSlug((string) $model->name, (int) $model->taxonomy_id);
             } else {

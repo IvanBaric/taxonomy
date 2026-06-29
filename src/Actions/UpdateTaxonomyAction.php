@@ -6,12 +6,15 @@ namespace IvanBaric\Taxonomy\Actions;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use IvanBaric\Corexis\Concerns\UsesOptimisticLocking;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Taxonomy\Events\TaxonomyUpdated;
 use IvanBaric\Taxonomy\Models\Taxonomy;
 
 final class UpdateTaxonomyAction
 {
+    use UsesOptimisticLocking;
+
     /**
      * @param  array<string, mixed>  $attributes
      */
@@ -28,6 +31,7 @@ final class UpdateTaxonomyAction
             'description' => ['nullable', 'string'],
             'is_filterable' => ['sometimes', 'boolean'],
             'is_multiple' => ['sometimes', 'boolean'],
+            'lock_version' => ['nullable', 'integer', 'min:0'],
         ]);
 
         if ($validator->fails()) {
@@ -38,10 +42,16 @@ final class UpdateTaxonomyAction
             );
         }
 
-        DB::transaction(static function () use ($taxonomy, $validator): void {
-            $taxonomy->fill($validator->validated());
-            $taxonomy->save();
+        $validated = $validator->validated();
+        $expectedLockVersion = $this->pullExpectedLockVersion($validated);
+
+        $saved = DB::transaction(function () use ($taxonomy, $validated, $expectedLockVersion): bool {
+            return $this->saveWithOptimisticLock($taxonomy, $validated, $expectedLockVersion);
         });
+
+        if (! $saved) {
+            return $this->staleModelResult();
+        }
 
         event(new TaxonomyUpdated($taxonomy->refresh()));
 

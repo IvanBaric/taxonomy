@@ -22,7 +22,13 @@ final class DeleteTaxonomyAction
         $slug = (string) $taxonomy->slug;
 
         DB::transaction(static function () use ($taxonomy): void {
-            $taxonomy->delete();
+            /** @var Taxonomy $lockedTaxonomy */
+            $lockedTaxonomy = Taxonomy::query()
+                ->whereKey($taxonomy->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $lockedTaxonomy->delete();
         });
 
         event(new TaxonomyDeleted($taxonomyId, $type, $slug));

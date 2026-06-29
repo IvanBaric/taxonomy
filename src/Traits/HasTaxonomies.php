@@ -233,6 +233,7 @@ trait HasTaxonomies
         $taxonomyItemModel = TaxonomyModels::taxonomyItem();
         $ids = [];
         $idCandidates = [];
+        $uuidCandidates = [];
         $slugCandidates = [];
         $invalid = [];
 
@@ -266,7 +267,9 @@ trait HasTaxonomies
                     continue;
                 }
 
-                if (ctype_digit($trimmed)) {
+                if (Str::isUuid($trimmed)) {
+                    $uuidCandidates[$trimmed] = $trimmed;
+                } elseif (ctype_digit($trimmed)) {
                     $integerValue = (int) $trimmed;
 
                     if ($integerValue > 0) {
@@ -299,6 +302,23 @@ trait HasTaxonomies
 
             foreach (array_diff(array_keys($idCandidates), $validIds) as $invalidId) {
                 $invalid[] = $idCandidates[$invalidId];
+            }
+        }
+
+        if ($uuidCandidates !== []) {
+            $validUuidRows = (clone $itemQuery)
+                ->whereIn('uuid', array_keys($uuidCandidates))
+                ->get(['id', 'uuid']);
+
+            $ids = array_merge(
+                $ids,
+                $validUuidRows->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all()
+            );
+
+            $validUuids = $validUuidRows->pluck('uuid')->all();
+
+            foreach (array_diff(array_keys($uuidCandidates), $validUuids) as $invalidUuid) {
+                $invalid[] = $uuidCandidates[$invalidUuid];
             }
         }
 

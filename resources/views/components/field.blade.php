@@ -2,7 +2,7 @@
     'field',
     'modelPrefix' => 'taxonomy',
     'searchPrefix' => 'taxonomySearch',
-    'createMethod' => 'createTaxonomyOption',
+    'searchPlaceholder' => __('Traži'),
     'modalPrefix' => 'create-taxonomy-',
     'searchPlaceholder' => __('Traži'),
     'createLabel' => __('Dodaj novi unos'),
@@ -52,7 +52,7 @@
             </x-slot>
 
             @foreach ($field->items as $item)
-                <flux:select.option value="{{ $item->id }}">{{ __($item->name) }}</flux:select.option>
+                <flux:select.option value="{{ $item->uuid }}">{{ __($item->name) }}</flux:select.option>
             @endforeach
 
             <flux:select.option.create modal="{{ $modalName }}">
@@ -66,7 +66,7 @@
             </x-slot>
 
             @foreach ($field->items as $item)
-                <flux:pillbox.option :value="$item->id">{{ __($item->name) }}</flux:pillbox.option>
+                <flux:pillbox.option :value="$item->uuid">{{ __($item->name) }}</flux:pillbox.option>
             @endforeach
 
             <flux:pillbox.option.create modal="{{ $modalName }}">

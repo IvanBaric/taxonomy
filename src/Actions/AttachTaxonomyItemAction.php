@@ -31,6 +31,11 @@ final class AttachTaxonomyItemAction
 
         try {
             DB::transaction(static function () use ($model, $type, $items): void {
+                $model->newQuery()
+                    ->whereKey($model->getKey())
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
                 $model->attachTaxonomy($type, $items);
             });
         } catch (InvalidArgumentException|InvalidTaxonomyAssignmentException|UnresolvedTenantException $exception) {

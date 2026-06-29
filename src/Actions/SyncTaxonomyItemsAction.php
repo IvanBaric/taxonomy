@@ -31,6 +31,11 @@ final class SyncTaxonomyItemsAction
 
         try {
             DB::transaction(static function () use ($model, $type, $items): void {
+                $model->newQuery()
+                    ->whereKey($model->getKey())
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
                 $model->syncTaxonomy($type, $items);
             });
         } catch (InvalidArgumentException|InvalidTaxonomyAssignmentException|UnresolvedTenantException $exception) {

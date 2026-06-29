@@ -12,12 +12,14 @@ return new class extends Migration
     {
         Schema::create('taxonomies', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->unique();
             $table->string('name');
             $table->string('slug');
             $table->string('type');
             $table->text('description')->nullable();
             $table->boolean('is_filterable')->default(false);
             $table->boolean('is_multiple')->default(false);
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
 
             $table->unique(['type', 'slug'], 'taxonomies_type_slug_unique');
@@ -26,12 +28,14 @@ return new class extends Migration
 
         Schema::create('taxonomy_items', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->unique();
             $table->foreignId('taxonomy_id')->constrained('taxonomies')->cascadeOnDelete();
             $table->string('name');
             $table->string('slug');
             $table->text('description')->nullable();
             $table->json('meta')->nullable();
             $table->unsignedInteger('position')->default(0);
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
 
             $table->unique(['taxonomy_id', 'slug'], 'taxonomy_items_taxonomy_slug_unique');
@@ -40,6 +44,7 @@ return new class extends Migration
 
         Schema::create('taxonomyables', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->nullable()->unique();
             $table->foreignId('taxonomy_item_id')->constrained('taxonomy_items')->cascadeOnDelete();
             $table->unsignedBigInteger('taxonomyable_id');
             $table->string('taxonomyable_type');

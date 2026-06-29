@@ -7,18 +7,21 @@ namespace IvanBaric\Taxonomy\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use IvanBaric\Corexis\Concerns\HasLockVersion;
 use IvanBaric\Taxonomy\Concerns\HasOptionalTenancy;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 
 class Taxonomy extends Model
 {
-    use HasOptionalTenancy;
+    use HasLockVersion, HasOptionalTenancy;
 
     protected $table = 'taxonomies';
 
     protected $fillable = [
         'name',
+        'uuid',
         'slug',
         'type',
         'description',
@@ -30,6 +33,7 @@ class Taxonomy extends Model
         'id' => 'int',
         'is_filterable' => 'bool',
         'is_multiple' => 'bool',
+        'lock_version' => 'int',
     ];
 
     protected $attributes = [
@@ -40,6 +44,10 @@ class Taxonomy extends Model
     protected static function booted(): void
     {
         static::creating(function (self $model): void {
+            if (Schema::hasColumn($model->getTable(), 'uuid') && blank($model->uuid)) {
+                $model->uuid = (string) Str::uuid();
+            }
+
             if (! isset($model->slug) || trim((string) $model->slug) === '') {
                 $model->slug = static::generateUniqueSlug((string) $model->name, (string) $model->type, $model);
             } else {
