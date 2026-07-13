@@ -7,18 +7,17 @@ namespace IvanBaric\Taxonomy\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\MorphToMany;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use IvanBaric\Corexis\Concerns\BelongsToTenant;
 use IvanBaric\Corexis\Concerns\HasLockVersion;
-use IvanBaric\Taxonomy\Concerns\HasOptionalTenancy;
+use IvanBaric\Corexis\Concerns\HasUniqueSlug;
+use IvanBaric\Corexis\Concerns\HasUuid;
+use IvanBaric\Taxonomy\Support\TaxonomyConfigResolver;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 
 class TaxonomyItem extends Model
 {
-    use HasLockVersion, HasOptionalTenancy;
-
-    protected $table = 'taxonomy_items';
+    use BelongsToTenant, HasLockVersion, HasUniqueSlug, HasUuid;
 
     protected $fillable = [
         'taxonomy_id',
@@ -41,31 +40,9 @@ class TaxonomyItem extends Model
         'position' => 0,
     ];
 
-    protected static function booted(): void
+    public function getTable(): string
     {
-        static::creating(function (self $model): void {
-            if (Schema::hasColumn($model->getTable(), 'uuid') && blank($model->uuid)) {
-                $model->uuid = (string) Str::uuid();
-            }
-
-            if (! isset($model->slug) || trim((string) $model->slug) === '') {
-                $model->slug = static::generateUniqueSlug((string) $model->name, (int) $model->taxonomy_id);
-            } else {
-                $model->slug = static::ensureUniqueSlug((string) $model->slug, (int) $model->taxonomy_id);
-            }
-        });
-
-        static::updating(function (self $model): void {
-            if (! $model->isDirty('slug')) {
-                return;
-            }
-
-            $slug = trim((string) $model->slug);
-
-            $model->slug = $slug === ''
-                ? static::ensureUniqueSlug((string) $model->name, (int) $model->taxonomy_id, $model->getKey())
-                : static::ensureUniqueSlug($slug, (int) $model->taxonomy_id, $model->getKey());
-        });
+        return TaxonomyConfigResolver::taxonomyItemsTable();
     }
 
     public function taxonomy(): BelongsTo
@@ -97,33 +74,19 @@ class TaxonomyItem extends Model
         return $query->orderBy('position')->orderBy('name');
     }
 
-    public function models(): MorphToMany
+    public function slugSource(): string
     {
-        return $this->morphToMany(Model::class, 'taxonomyable', 'taxonomyables', 'taxonomy_item_id', 'taxonomyable_id');
+        return trim((string) $this->getAttribute('name')) ?: 'item';
     }
 
-    protected static function generateUniqueSlug(string $name, int $taxonomyId): string
+    /** @return array<string, int|string|null> */
+    public function uniqueSlugScope(): array
     {
-        $base = Str::slug($name) ?: 'item';
+        $tenantColumn = $this->getTenantColumn();
 
-        return static::ensureUniqueSlug($base, $taxonomyId);
-    }
-
-    protected static function ensureUniqueSlug(string $slug, int $taxonomyId, mixed $ignoreId = null): string
-    {
-        $base = Str::slug($slug) ?: 'item';
-        $candidate = $base;
-        $suffix = 1;
-
-        while (static::query()
-            ->where('taxonomy_id', $taxonomyId)
-            ->where('slug', $candidate)
-            ->when($ignoreId !== null, fn (Builder $query) => $query->whereKeyNot($ignoreId))
-            ->exists()) {
-            $candidate = $base.'-'.$suffix;
-            $suffix++;
-        }
-
-        return $candidate;
+        return [
+            $tenantColumn => $this->getAttribute($tenantColumn),
+            'taxonomy_id' => $this->getAttribute('taxonomy_id'),
+        ];
     }
 }

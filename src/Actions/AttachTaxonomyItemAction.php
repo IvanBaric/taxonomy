@@ -8,62 +8,54 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use IvanBaric\Corexis\Data\ActionResult;
+use IvanBaric\Corexis\Exceptions\TenantNotResolvedException;
 use IvanBaric\Taxonomy\Events\TaxonomyItemAttached;
 use IvanBaric\Taxonomy\Exceptions\InvalidTaxonomyAssignmentException;
-use IvanBaric\Taxonomy\Exceptions\UnresolvedTenantException;
+use IvanBaric\Taxonomy\Support\TaxonomyAssignment;
 
-final class AttachTaxonomyItemAction
+final readonly class AttachTaxonomyItemAction
 {
+    public function __construct(private TaxonomyAssignment $assignments) {}
+
     public function handle(Model $model, string $type, mixed $items): ActionResult
     {
         if ($result = corexis_authorization_result('taxonomy.attach', $model)) {
             return $result;
         }
 
-        if (! method_exists($model, 'attachTaxonomy') || ! method_exists($model, 'taxonomy')) {
+        if (! $this->assignments->supports($model)) {
             return ActionResult::error(
                 message: __('Model ne podržava taksonomije.'),
                 code: 'taxonomy_not_supported',
             );
         }
 
-        $before = $this->currentItemIds($model, $type);
-
         try {
-            DB::transaction(static function () use ($model, $type, $items): void {
-                $model->newQuery()
+            [$lockedModel, $attached] = DB::transaction(function () use ($model, $type, $items): array {
+                /** @var Model $lockedModel */
+                $lockedModel = $model->newQuery()
                     ->whereKey($model->getKey())
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                $model->attachTaxonomy($type, $items);
+                $before = $this->assignments->itemIds($lockedModel, $type);
+                $this->assignments->attach($lockedModel, $type, $items);
+                $after = $this->assignments->itemIds($lockedModel, $type);
+
+                return [$lockedModel, array_values(array_diff($after, $before))];
             });
-        } catch (InvalidArgumentException|InvalidTaxonomyAssignmentException|UnresolvedTenantException $exception) {
+        } catch (InvalidArgumentException|InvalidTaxonomyAssignmentException|TenantNotResolvedException $exception) {
             return ActionResult::error(
                 message: $exception->getMessage(),
                 code: 'taxonomy_attach_failed',
             );
         }
 
-        $after = $this->currentItemIds($model, $type);
-        $attached = array_values(array_diff($after, $before));
-
-        event(new TaxonomyItemAttached($model, $type, $attached));
+        event(new TaxonomyItemAttached($lockedModel, $type, $attached));
 
         return ActionResult::success(
             message: __('Taksonomske stavke su dodane.'),
             data: ['attached_item_ids' => $attached],
         );
-    }
-
-    /**
-     * @return array<int, int>
-     */
-    private function currentItemIds(Model $model, string $type): array
-    {
-        return $model->taxonomy($type)
-            ->pluck('taxonomy_items.id')
-            ->map(static fn (mixed $id): int => (int) $id)
-            ->all();
     }
 }

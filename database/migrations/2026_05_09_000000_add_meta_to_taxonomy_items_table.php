@@ -5,13 +5,16 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use IvanBaric\Taxonomy\Support\TaxonomyConfigResolver;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('taxonomy_items', function (Blueprint $table): void {
-            if (! Schema::hasColumn('taxonomy_items', 'meta')) {
+        $taxonomyItems = TaxonomyConfigResolver::taxonomyItemsTable();
+
+        Schema::table($taxonomyItems, function (Blueprint $table) use ($taxonomyItems): void {
+            if (! Schema::hasColumn($taxonomyItems, 'meta')) {
                 $table->json('meta')->nullable()->after('description');
             }
         });
@@ -19,8 +22,10 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('taxonomy_items', function (Blueprint $table): void {
-            if (Schema::hasColumn('taxonomy_items', 'meta')) {
+        $taxonomyItems = TaxonomyConfigResolver::taxonomyItemsTable();
+
+        Schema::table($taxonomyItems, function (Blueprint $table) use ($taxonomyItems): void {
+            if (Schema::hasColumn($taxonomyItems, 'meta')) {
                 $table->dropColumn('meta');
             }
         });

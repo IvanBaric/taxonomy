@@ -80,7 +80,8 @@
 
     @if ($showModal)
         <flux:modal name="{{ $modalName }}" class="md:w-96">
-            <form wire:submit="{{ $createMethod }}('{{ $type }}')" class="space-y-6">
+            <form wire:submit="{{ $createMethod }}('{{ $type }}')" wire:loading.class="admin-panel-content-loading" wire:target="{{ $createMethod }}" class="relative space-y-6">
+                <x-admin-ui::loading-overlay target="{{ $createMethod }}" :text="__('Spremanje...')" />
                 <div>
                     <flux:heading size="lg">{{ $modalTitle }}</flux:heading>
                     <flux:text class="mt-2">{{ __('Unesite naziv za :field.', ['field' => \Illuminate\Support\Str::lower($fieldName)]) }}</flux:text>
@@ -94,7 +95,7 @@
 
                 <div class="flex">
                     <flux:spacer />
-                    <flux:button type="submit" variant="primary">{{ $modalSubmitLabel }}</flux:button>
+                    <x-admin-ui::submit-button :target="$createMethod" icon="plus">{{ $modalSubmitLabel }}</x-admin-ui::submit-button>
                 </div>
             </form>
         </flux:modal>

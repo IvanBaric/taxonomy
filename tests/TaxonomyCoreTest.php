@@ -35,6 +35,24 @@ it('works without translatable and media dependencies', function (): void {
     expect($post->taxonomy('blog')->ordered()->pluck('slug')->all())->toBe(['php', 'php-1']);
 });
 
+it('uses corexis uuid and scoped unique slugs', function (): void {
+    $categories = Taxonomy::create(['name' => 'Categories', 'type' => 'blog']);
+    $duplicate = Taxonomy::create(['name' => 'Categories', 'type' => 'blog']);
+    $productCategories = Taxonomy::create(['name' => 'Categories', 'type' => 'products']);
+
+    $first = $categories->items()->create(['name' => 'News']);
+    $second = $categories->items()->create(['name' => 'News']);
+
+    expect($categories->uuid)->toBeString()->not->toBeEmpty()
+        ->and($categories->getRouteKeyName())->toBe('uuid')
+        ->and($categories->slug)->toBe('categories')
+        ->and($duplicate->slug)->toBe('categories-1')
+        ->and($productCategories->slug)->toBe('categories')
+        ->and($first->uuid)->toBeString()->not->toBeEmpty()
+        ->and($first->slug)->toBe('news')
+        ->and($second->slug)->toBe('news-1');
+});
+
 it('stores and retrieves meta array data', function (): void {
     $taxonomy = Taxonomy::create([
         'name' => 'Ingredients',

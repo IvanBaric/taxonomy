@@ -27,6 +27,12 @@ return [
         'taxonomy_item' => TaxonomyItem::class,
     ],
 
+    'tables' => [
+        'taxonomies' => 'taxonomies',
+        'taxonomy_items' => 'taxonomy_items',
+        'taxonomyables' => 'taxonomyables',
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Invalid assignment behavior
@@ -60,75 +66,6 @@ return [
         'enabled' => false,
         'taxonomy_column' => 'is_active',
         'taxonomy_item_column' => 'is_active',
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Optional tenancy support
-    |--------------------------------------------------------------------------
-    |
-    | Keep this disabled if your app does not need team/tenant data isolation.
-    | Model overrides are enough for app-level extensions like:
-    | - Spatie Translatable
-    | - Media Library
-    | - UUID traits
-    | - custom scopes / relations
-    |
-    | Enable this only if taxonomy records must be isolated by a tenant key
-    | such as team_id, tenant_id, organisation_id, etc.
-    |
-    */
-    'tenancy' => [
-        // Turns tenancy behavior on or off for the package.
-        // false = package behaves like a normal single-database taxonomy package.
-        // true  = package starts using the configured tenancy column and resolver.
-        'enabled' => false,
-
-        // Name of the column used for tenancy isolation.
-        // Default is team_id, but you can change it to tenant_id or something else.
-        'column' => 'team_id',
-
-        // When true, package models get a global scope and queries are automatically
-        // filtered to the current tenant/team.
-        // Example: Taxonomy::query() will only return rows for the resolved team.
-        //
-        // When false, no automatic query filtering is applied.
-        // Use this only if your app wants to handle tenant filtering manually.
-        'apply_global_scope' => true,
-
-        // Controls write behavior when tenancy is enabled but the resolver
-        // cannot determine the current tenant/team.
-        //
-        // true  = create / attach operations throw an exception
-        // false = package will not auto-fill the tenancy column
-        //
-        // Reads are still fail-closed when tenant cannot be resolved.
-        // attachTaxonomy(), syncTaxonomy(), and detachTaxonomy() always require
-        // a resolved tenant when tenancy is enabled.
-        'fail_when_unresolved' => true,
-
-        // Resolver responsible for returning the current tenant key.
-        // Expected result: int|string|null
-        //
-        // You can pass:
-        // - a class name that implements IvanBaric\Taxonomy\Contracts\TenantResolver
-        // - a resolver instance
-        // - null if you want to disable package-level resolution manually
-        //
-        // Example:
-        // 'resolver' => App\Support\CurrentTeamResolver::class,
-        'resolver' => IvanBaric\Taxonomy\Resolvers\CorexisTenantResolver::class,
-
-        // Optional tenant model class.
-        // This is NOT required for the package to work.
-        // Keep it null unless your app wants a concrete model reference for
-        // custom relations or helper logic.
-        'tenant_model' => null,
-
-        // When tenancy is enabled, the pivot table must also contain the same
-        // tenant column so attach/sync/detach operations stay tenant-safe.
-        // This package treats pivot isolation as mandatory for multi-tenant use.
-        'require_pivot_tenant_column' => true,
     ],
 
     'permissions' => [

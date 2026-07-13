@@ -7,17 +7,17 @@ namespace IvanBaric\Taxonomy\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use IvanBaric\Corexis\Concerns\BelongsToTenant;
 use IvanBaric\Corexis\Concerns\HasLockVersion;
-use IvanBaric\Taxonomy\Concerns\HasOptionalTenancy;
+use IvanBaric\Corexis\Concerns\HasUniqueSlug;
+use IvanBaric\Corexis\Concerns\HasUuid;
+use IvanBaric\Taxonomy\Support\TaxonomyConfigResolver;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 
 class Taxonomy extends Model
 {
-    use HasLockVersion, HasOptionalTenancy;
-
-    protected $table = 'taxonomies';
+    use BelongsToTenant, HasLockVersion, HasUniqueSlug, HasUuid;
 
     protected $fillable = [
         'name',
@@ -41,31 +41,9 @@ class Taxonomy extends Model
         'is_multiple' => false,
     ];
 
-    protected static function booted(): void
+    public function getTable(): string
     {
-        static::creating(function (self $model): void {
-            if (Schema::hasColumn($model->getTable(), 'uuid') && blank($model->uuid)) {
-                $model->uuid = (string) Str::uuid();
-            }
-
-            if (! isset($model->slug) || trim((string) $model->slug) === '') {
-                $model->slug = static::generateUniqueSlug((string) $model->name, (string) $model->type, $model);
-            } else {
-                $model->slug = static::ensureUniqueSlug((string) $model->slug, (string) $model->type, null, $model);
-            }
-        });
-
-        static::updating(function (self $model): void {
-            if (! $model->isDirty('slug')) {
-                return;
-            }
-
-            $slug = trim((string) $model->slug);
-
-            $model->slug = $slug === ''
-                ? static::ensureUniqueSlug((string) $model->name, (string) $model->type, $model->getKey(), $model)
-                : static::ensureUniqueSlug($slug, (string) $model->type, $model->getKey(), $model);
-        });
+        return TaxonomyConfigResolver::taxonomiesTable();
     }
 
     public function items(): HasMany
@@ -88,50 +66,19 @@ class Taxonomy extends Model
         return $query->orderBy('type')->orderBy('name');
     }
 
-    protected static function generateUniqueSlug(string $name, string $type, ?self $model = null): string
+    public function slugSource(): string
     {
-        $base = Str::slug($name) ?: 'taxonomy';
-
-        return static::ensureUniqueSlug($base, $type, null, $model);
+        return trim((string) $this->getAttribute('name')) ?: 'taxonomy';
     }
 
-    protected static function ensureUniqueSlug(string $slug, string $type, mixed $ignoreId = null, ?self $model = null): string
+    /** @return array<string, int|string|null> */
+    public function uniqueSlugScope(): array
     {
-        $base = Str::slug($slug) ?: 'taxonomy';
-        $candidate = $base;
-        $suffix = 1;
+        $tenantColumn = $this->getTenantColumn();
 
-        while (static::slugExists($candidate, $type, $ignoreId, $model)) {
-            $candidate = $base.'-'.$suffix;
-            $suffix++;
-        }
-
-        return $candidate;
-    }
-
-    protected static function slugExists(string $slug, string $type, mixed $ignoreId = null, ?self $model = null): bool
-    {
-        $query = static::query()
-            ->where('type', $type)
-            ->where('slug', $slug);
-
-        if ($ignoreId !== null) {
-            $query->whereKeyNot($ignoreId);
-        }
-
-        if (TaxonomyModels::tenancyEnabled()) {
-            TaxonomyModels::assertTenantColumnExists((new static)->getTable());
-
-            $column = TaxonomyModels::tenantColumn();
-            $tenantKey = $model?->getAttribute($column) ?? TaxonomyModels::resolveTenantKey();
-
-            if ($tenantKey === null || $tenantKey === '') {
-                return false;
-            }
-
-            $query->where($column, $tenantKey);
-        }
-
-        return $query->exists();
+        return [
+            $tenantColumn => $this->getAttribute($tenantColumn),
+            'type' => $this->getAttribute('type'),
+        ];
     }
 }

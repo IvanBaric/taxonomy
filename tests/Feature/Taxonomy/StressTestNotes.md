@@ -61,4 +61,3 @@ Ready to publish as a *generic core taxonomy package* if README clearly states:
 Not ready to publish as a "production-ready dealer taxonomy system" without adding:
 - enforcement + validation layer
 - filtering/query ergonomics
-

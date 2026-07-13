@@ -5,36 +5,39 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use IvanBaric\Taxonomy\Support\TaxonomyConfigResolver;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('taxonomy_items')) {
+        $taxonomyItems = TaxonomyConfigResolver::taxonomyItemsTable();
+
+        if (! Schema::hasTable($taxonomyItems)) {
             return;
         }
 
-        if (! Schema::hasColumn('taxonomy_items', 'uuid')) {
-            Schema::table('taxonomy_items', function (Blueprint $table): void {
+        if (! Schema::hasColumn($taxonomyItems, 'uuid')) {
+            Schema::table($taxonomyItems, function (Blueprint $table): void {
                 $table->uuid('uuid')->nullable()->after('id');
             });
         }
 
-        DB::table('taxonomy_items')
+        DB::table($taxonomyItems)
             ->whereNull('uuid')
             ->orWhere('uuid', '')
             ->orderBy('id')
             ->select(['id'])
-            ->chunkById(100, function ($items): void {
+            ->chunkById(100, function ($items) use ($taxonomyItems): void {
                 foreach ($items as $item) {
-                    DB::table('taxonomy_items')
+                    DB::table($taxonomyItems)
                         ->where('id', $item->id)
                         ->update(['uuid' => (string) Str::uuid()]);
                 }
             });
 
-        if (! $this->hasIndex('taxonomy_items', 'taxonomy_items_uuid_unique')) {
-            Schema::table('taxonomy_items', function (Blueprint $table): void {
+        if (! $this->hasIndex($taxonomyItems, 'taxonomy_items_uuid_unique')) {
+            Schema::table($taxonomyItems, function (Blueprint $table): void {
                 $table->unique('uuid', 'taxonomy_items_uuid_unique');
             });
         }
@@ -42,12 +45,14 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('taxonomy_items') || ! Schema::hasColumn('taxonomy_items', 'uuid')) {
+        $taxonomyItems = TaxonomyConfigResolver::taxonomyItemsTable();
+
+        if (! Schema::hasTable($taxonomyItems) || ! Schema::hasColumn($taxonomyItems, 'uuid')) {
             return;
         }
 
-        Schema::table('taxonomy_items', function (Blueprint $table): void {
-            if ($this->hasIndex('taxonomy_items', 'taxonomy_items_uuid_unique')) {
+        Schema::table($taxonomyItems, function (Blueprint $table) use ($taxonomyItems): void {
+            if ($this->hasIndex($taxonomyItems, 'taxonomy_items_uuid_unique')) {
                 $table->dropUnique('taxonomy_items_uuid_unique');
             }
 

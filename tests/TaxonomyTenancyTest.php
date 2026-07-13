@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use IvanBaric\Corexis\Exceptions\TenantNotResolvedException;
 use IvanBaric\Taxonomy\Exceptions\MisconfiguredTenancyException;
-use IvanBaric\Taxonomy\Exceptions\UnresolvedTenantException;
 use IvanBaric\Taxonomy\Models\Taxonomy;
 use IvanBaric\Taxonomy\Models\TaxonomyItem;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\Post;
@@ -12,8 +13,6 @@ use IvanBaric\Taxonomy\Tests\Fixtures\Support\StaticTenantResolver;
 
 beforeEach(function (): void {
     $this->enableTeamTenancy();
-
-    config()->set('taxonomy.tenancy.resolver', StaticTenantResolver::class);
 
     StaticTenantResolver::$tenantKey = null;
 });
@@ -38,6 +37,7 @@ function createTenantTaxonomy(string $type, string $taxonomyName, array $itemNam
 
 it('fails closed on unresolved reads and throws on unresolved writes', function (): void {
     DB::table('taxonomies')->insert([
+        'uuid' => (string) Str::uuid7(),
         'name' => 'Categories',
         'slug' => 'categories',
         'type' => 'blog',
@@ -46,18 +46,18 @@ it('fails closed on unresolved reads and throws on unresolved writes', function 
         'updated_at' => now(),
     ]);
 
-    expect(Taxonomy::query()->count())->toBe(0);
+    expect(fn () => Taxonomy::query()->count())->toThrow(TenantNotResolvedException::class);
 
     $post = Post::create(['title' => 'Tenant aware']);
 
     expect(fn () => Taxonomy::create([
         'name' => 'Blocked',
         'type' => 'blog',
-    ]))->toThrow(UnresolvedTenantException::class);
+    ]))->toThrow(TenantNotResolvedException::class);
 
-    expect(fn () => $post->attachTaxonomy('blog', [1]))->toThrow(UnresolvedTenantException::class);
-    expect(fn () => $post->syncTaxonomy('blog', []))->toThrow(UnresolvedTenantException::class);
-    expect(fn () => $post->detachTaxonomy('blog'))->toThrow(UnresolvedTenantException::class);
+    expect(fn () => $post->attachTaxonomy('blog', [1]))->toThrow(TenantNotResolvedException::class);
+    expect(fn () => $post->syncTaxonomy('blog', []))->toThrow(TenantNotResolvedException::class);
+    expect(fn () => $post->detachTaxonomy('blog'))->toThrow(TenantNotResolvedException::class);
 });
 
 it('keeps pivot rows isolated between tenants during detach on the same model', function (): void {
@@ -107,10 +107,7 @@ it('keeps pivot rows isolated between tenants during sync on the same model', fu
     expect($tenantTwoRows)->toBe([$tenantTwoItems['News']->getKey()]);
 });
 
-it('keeps write-side item resolution tenant-safe even when global scope is disabled', function (): void {
-    $this->enableTeamTenancy(configOverrides: ['apply_global_scope' => false]);
-    config()->set('taxonomy.tenancy.resolver', StaticTenantResolver::class);
-
+it('keeps write-side item resolution tenant-safe through the corexis global scope', function (): void {
     $post = Post::create(['title' => 'Cross-tenant safety']);
 
     StaticTenantResolver::$tenantKey = 10;
@@ -146,9 +143,6 @@ it('allows identical taxonomy slugs across tenants when tenant-aware schema is c
 
 it('throws a clear exception when pivot tenant isolation is required but not configured', function (): void {
     $this->enableTeamTenancy(withPivotTenantColumn: false, withTenantAwarePivotUnique: false);
-    config()->set('taxonomy.tenancy.resolver', StaticTenantResolver::class);
-    config()->set('taxonomy.tenancy.require_pivot_tenant_column', true);
-
     StaticTenantResolver::$tenantKey = 10;
 
     $post = Post::create(['title' => 'Pivot config']);

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace IvanBaric\Taxonomy\Actions;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use IvanBaric\Corexis\Data\ActionResult;
 use IvanBaric\Taxonomy\Events\TaxonomyCreated;
@@ -43,7 +42,7 @@ final class CreateTaxonomyAction
         $modelClass = TaxonomyModels::taxonomy();
 
         /** @var Taxonomy $taxonomy */
-        $taxonomy = DB::transaction(static fn (): Taxonomy => $modelClass::query()->create($validator->validated()));
+        $taxonomy = $modelClass::query()->create($validator->validated());
 
         event(new TaxonomyCreated($taxonomy->refresh()));
 

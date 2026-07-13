@@ -18,12 +18,12 @@ final class DeleteTaxonomyAction
         }
 
         $taxonomyId = $taxonomy->getKey();
-        $type = (string) $taxonomy->type;
-        $slug = (string) $taxonomy->slug;
+        $type = (string) $taxonomy->getAttribute('type');
+        $slug = (string) $taxonomy->getAttribute('slug');
 
         DB::transaction(static function () use ($taxonomy): void {
             /** @var Taxonomy $lockedTaxonomy */
-            $lockedTaxonomy = Taxonomy::query()
+            $lockedTaxonomy = $taxonomy->newQuery()
                 ->whereKey($taxonomy->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();

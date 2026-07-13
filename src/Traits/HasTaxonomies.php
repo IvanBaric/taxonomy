@@ -9,19 +9,19 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use IvanBaric\Corexis\Contracts\TenantResolver;
+use IvanBaric\Corexis\Exceptions\TenantNotResolvedException;
 use IvanBaric\Taxonomy\Exceptions\InvalidTaxonomyAssignmentException;
-use IvanBaric\Taxonomy\Exceptions\UnresolvedTenantException;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 
 trait HasTaxonomies
 {
     protected function taxonomyItemsRelation(): MorphToMany
     {
-        /** @var Model $this */
         $relation = $this->morphToMany(
             TaxonomyModels::taxonomyItem(),
             'taxonomyable',
-            'taxonomyables',
+            TaxonomyModels::taxonomyablesTable(),
             'taxonomyable_id',
             'taxonomy_item_id'
         )->withTimestamps();
@@ -31,21 +31,12 @@ trait HasTaxonomies
             $this->applyActiveConstraint($query, TaxonomyModels::taxonomy(), 'taxonomy_column');
         });
 
-        if (! TaxonomyModels::tenancyEnabled()) {
+        if (! $this->taxonomyTenancyEnabled()) {
             return $relation;
         }
 
-        $tenantKey = TaxonomyModels::resolveTenantKey();
-
-        if ($tenantKey === null || $tenantKey === '') {
-            return $relation->whereRaw('1 = 0');
-        }
-
-        if (! TaxonomyModels::requirePivotTenantColumn()) {
-            return $relation;
-        }
-
-        $column = TaxonomyModels::tenantColumn();
+        $tenantKey = $this->taxonomyTenantKey();
+        $column = $this->taxonomyTenantColumn();
         TaxonomyModels::assertPivotTenantColumnExists();
 
         return $relation->withPivot($column)->wherePivot($column, $tenantKey);
@@ -117,7 +108,7 @@ trait HasTaxonomies
 
             [$items, $operator] = $this->parseTaxonomyFilter($filter, $defaultOperator);
 
-            $query->withTaxonomy($type, $items, $operator, $onlyFilterable);
+            $this->scopeWithTaxonomy($query, $type, $items, $operator, $onlyFilterable);
         }
 
         return $query;
@@ -125,7 +116,7 @@ trait HasTaxonomies
 
     public function attachTaxonomy(string $type, mixed $items): static
     {
-        $tenantKey = $this->tenantKeyForWrite('attach');
+        $tenantKey = $this->taxonomyTenantKey();
         $resolution = $this->resolveItemIds($type, $items);
         $ids = $resolution['ids'];
 
@@ -142,10 +133,10 @@ trait HasTaxonomies
 
     public function detachTaxonomy(string $type, mixed $items = null): static
     {
-        $tenantKey = $this->tenantKeyForWrite('detach');
+        $tenantKey = $this->taxonomyTenantKey();
 
         if ($items === null) {
-            $currentIds = $this->taxonomy($type)->pluck('taxonomy_items.id')->all();
+            $currentIds = $this->taxonomy($type)->pluck(TaxonomyModels::taxonomyItemsTable().'.id')->all();
 
             if ($currentIds !== []) {
                 $this->taxonomyItemsRelationForWrite($tenantKey)->detach($currentIds);
@@ -165,8 +156,8 @@ trait HasTaxonomies
 
     public function syncTaxonomy(string $type, mixed $items): static
     {
-        $tenantKey = $this->tenantKeyForWrite('sync');
-        $currentIds = $this->taxonomy($type)->pluck('taxonomy_items.id')->all();
+        $tenantKey = $this->taxonomyTenantKey();
+        $currentIds = $this->taxonomy($type)->pluck(TaxonomyModels::taxonomyItemsTable().'.id')->all();
         $resolution = $this->resolveItemIds($type, $items);
 
         if ($resolution['explicit_empty']) {
@@ -177,11 +168,7 @@ trait HasTaxonomies
             return $this;
         }
 
-        if ($resolution['ids'] === [] && $resolution['invalid'] === []) {
-            return $this;
-        }
-
-        if ($resolution['ids'] === [] && $resolution['invalid'] !== []) {
+        if ($resolution['ids'] === []) {
             return $this;
         }
 
@@ -211,7 +198,16 @@ trait HasTaxonomies
             return false;
         }
 
-        return $this->taxonomy($type)->whereIn('taxonomy_items.id', $ids)->exists();
+        return $this->taxonomy($type)->whereIn(TaxonomyModels::taxonomyItemsTable().'.id', $ids)->exists();
+    }
+
+    /** @return array<int, int> */
+    public function taxonomyItemIds(string $type): array
+    {
+        return $this->taxonomy($type)
+            ->pluck(TaxonomyModels::taxonomyItemsTable().'.id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->all();
     }
 
     /**
@@ -389,49 +385,41 @@ trait HasTaxonomies
 
     protected function taxonomyItemsRelationForWrite(int|string|null $tenantKey = null): MorphToMany
     {
-        /** @var Model $this */
         $relation = $this->morphToMany(
             TaxonomyModels::taxonomyItem(),
             'taxonomyable',
-            'taxonomyables',
+            TaxonomyModels::taxonomyablesTable(),
             'taxonomyable_id',
             'taxonomy_item_id'
         )->withTimestamps();
 
-        if (! TaxonomyModels::tenancyEnabled()) {
+        if (! $this->taxonomyTenancyEnabled()) {
             return $relation;
         }
 
-        if (! TaxonomyModels::requirePivotTenantColumn()) {
-            return $relation;
-        }
+        $tenantKey ??= $this->taxonomyTenantKey();
 
-        $tenantKey ??= $this->tenantKeyForWrite('attach');
-
-        $column = TaxonomyModels::tenantColumn();
+        $column = $this->taxonomyTenantColumn();
         TaxonomyModels::assertPivotTenantColumnExists();
 
         return $relation->withPivot($column)->wherePivot($column, $tenantKey);
     }
 
-    protected function tenantKeyForWrite(string $operation): int|string|null
+    protected function taxonomyTenantKey(): int|string|null
     {
-        if (! TaxonomyModels::tenancyEnabled()) {
+        $resolver = app(TenantResolver::class);
+
+        if (! $resolver->enabled()) {
             return null;
         }
 
-        $tenantKey = TaxonomyModels::resolveTenantKey();
+        $tenantKey = $resolver->id();
 
         if ($tenantKey !== null && $tenantKey !== '') {
             return $tenantKey;
         }
 
-        return match ($operation) {
-            'attach' => throw UnresolvedTenantException::forAttach(),
-            'detach' => throw UnresolvedTenantException::forDetach(),
-            'sync' => throw UnresolvedTenantException::forSync(),
-            default => throw UnresolvedTenantException::forAttach(),
-        };
+        throw TenantNotResolvedException::make();
     }
 
     /**
@@ -446,11 +434,11 @@ trait HasTaxonomies
             $payload[$id] = [];
         }
 
-        if (! TaxonomyModels::tenancyEnabled() || ! TaxonomyModels::requirePivotTenantColumn()) {
+        if (! $this->taxonomyTenancyEnabled()) {
             return $payload;
         }
 
-        $column = TaxonomyModels::tenantColumn();
+        $column = $this->taxonomyTenantColumn();
 
         foreach ($ids as $id) {
             $payload[$id] = [$column => $tenantKey];
@@ -470,20 +458,17 @@ trait HasTaxonomies
 
         $this->applyActiveConstraint($query, $taxonomyItemModel, 'taxonomy_item_column');
 
-        if (! TaxonomyModels::tenancyEnabled()) {
-            return $query;
-        }
+        return $query;
+    }
 
-        $tenantKey = TaxonomyModels::resolveTenantKey();
+    protected function taxonomyTenancyEnabled(): bool
+    {
+        return app(TenantResolver::class)->enabled();
+    }
 
-        if ($tenantKey === null || $tenantKey === '') {
-            return $query->whereRaw('1 = 0');
-        }
-
-        $column = TaxonomyModels::tenantColumn();
-        TaxonomyModels::assertTenantColumnExists((new $taxonomyItemModel)->getTable());
-
-        return $query->where($column, $tenantKey);
+    protected function taxonomyTenantColumn(): string
+    {
+        return (string) config('corexis.tenancy.id_column', 'team_id');
     }
 
     protected function isExplicitEmptyInput(mixed $items): bool
@@ -620,7 +605,7 @@ trait HasTaxonomies
         $model = new $modelClass;
 
         if (method_exists($model, 'scopeActive')) {
-            $query->active();
+            $model->scopeActive($query);
 
             return;
         }

@@ -5,17 +5,14 @@
   "license": "MIT",
   "require": {
     "php": "^8.2",
-    "ivanbaric/corexis": "^0.1 || ^1.0",
+    "ivanbaric/corexis": "dev-main as 1.0.0",
     "illuminate/support": "^11.0 || ^12.0 || ^13.0",
     "illuminate/database": "^11.0 || ^12.0 || ^13.0"
   },
   "autoload": {
     "psr-4": {
       "IvanBaric\\Taxonomy\\": "src/"
-    },
-    "files": [
-      "src/helpers.php"
-    ]
+    }
   },
   "autoload-dev": {
     "psr-4": {
@@ -41,6 +38,15 @@
       "pestphp/pest-plugin": true
     }
   },
+  "repositories": [
+    {
+      "type": "path",
+      "url": "../corexis",
+      "options": {
+        "symlink": true
+      }
+    }
+  ],
   "minimum-stability": "stable",
   "prefer-stable": true
 }

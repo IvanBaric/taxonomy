@@ -5,12 +5,17 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use IvanBaric\Taxonomy\Support\TaxonomyConfigResolver;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('taxonomies', function (Blueprint $table): void {
+        $taxonomies = TaxonomyConfigResolver::taxonomiesTable();
+        $taxonomyItems = TaxonomyConfigResolver::taxonomyItemsTable();
+        $taxonomyables = TaxonomyConfigResolver::taxonomyablesTable();
+
+        Schema::create($taxonomies, function (Blueprint $table): void {
             $table->id();
             $table->uuid('uuid')->unique();
             $table->string('name');
@@ -26,10 +31,10 @@ return new class extends Migration
             $table->index(['type', 'name'], 'taxonomies_type_name_index');
         });
 
-        Schema::create('taxonomy_items', function (Blueprint $table): void {
+        Schema::create($taxonomyItems, function (Blueprint $table) use ($taxonomies): void {
             $table->id();
             $table->uuid('uuid')->unique();
-            $table->foreignId('taxonomy_id')->constrained('taxonomies')->cascadeOnDelete();
+            $table->foreignId('taxonomy_id')->constrained($taxonomies)->cascadeOnDelete();
             $table->string('name');
             $table->string('slug');
             $table->text('description')->nullable();
@@ -42,10 +47,10 @@ return new class extends Migration
             $table->index(['taxonomy_id', 'position'], 'taxonomy_items_taxonomy_position_index');
         });
 
-        Schema::create('taxonomyables', function (Blueprint $table): void {
+        Schema::create($taxonomyables, function (Blueprint $table) use ($taxonomyItems): void {
             $table->id();
             $table->uuid('uuid')->nullable()->unique();
-            $table->foreignId('taxonomy_item_id')->constrained('taxonomy_items')->cascadeOnDelete();
+            $table->foreignId('taxonomy_item_id')->constrained($taxonomyItems)->cascadeOnDelete();
             $table->unsignedBigInteger('taxonomyable_id');
             $table->string('taxonomyable_type');
             $table->timestamps();
@@ -57,8 +62,8 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('taxonomyables');
-        Schema::dropIfExists('taxonomy_items');
-        Schema::dropIfExists('taxonomies');
+        Schema::dropIfExists(TaxonomyConfigResolver::taxonomyablesTable());
+        Schema::dropIfExists(TaxonomyConfigResolver::taxonomyItemsTable());
+        Schema::dropIfExists(TaxonomyConfigResolver::taxonomiesTable());
     }
 };

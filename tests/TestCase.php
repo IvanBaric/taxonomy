@@ -17,6 +17,7 @@ use IvanBaric\Taxonomy\Tests\Fixtures\Models\CustomTaxonomyItem;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\DealerTaxonomy;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\DealerTaxonomyItem;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\Post;
+use IvanBaric\Taxonomy\Tests\Fixtures\Support\StaticTenantResolver;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 abstract class TestCase extends Orchestra
@@ -60,6 +61,8 @@ abstract class TestCase extends Orchestra
     {
         Schema::create('taxonomies', function (Blueprint $table): void {
             $table->id();
+            $table->unsignedBigInteger('team_id')->nullable()->index();
+            $table->uuid('uuid')->unique();
             $table->string('name');
             $table->string('slug');
             $table->string('type');
@@ -73,12 +76,15 @@ abstract class TestCase extends Orchestra
             $table->boolean('show_on_card')->default(false);
             $table->unsignedInteger('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
-            $table->unique(['type', 'slug']);
+            $table->unique(['team_id', 'type', 'slug']);
         });
 
         Schema::create('taxonomy_items', function (Blueprint $table): void {
             $table->id();
+            $table->unsignedBigInteger('team_id')->nullable()->index();
+            $table->uuid('uuid')->unique();
             $table->foreignId('taxonomy_id')->constrained('taxonomies')->cascadeOnDelete();
             $table->string('name');
             $table->string('slug');
@@ -87,12 +93,14 @@ abstract class TestCase extends Orchestra
             $table->unsignedInteger('sort_order')->default(0);
             $table->unsignedInteger('position')->default(0);
             $table->boolean('is_active')->default(true);
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
             $table->unique(['taxonomy_id', 'slug']);
         });
 
         Schema::create('taxonomyables', function (Blueprint $table): void {
             $table->id();
+            $table->unsignedBigInteger('team_id')->nullable()->index();
             $table->foreignId('taxonomy_item_id')->constrained('taxonomy_items')->cascadeOnDelete();
             $table->unsignedBigInteger('taxonomyable_id');
             $table->string('taxonomyable_type');
@@ -121,17 +129,15 @@ abstract class TestCase extends Orchestra
         });
     }
 
-    protected function enableTeamTenancy(
-        bool $withPivotTenantColumn = true,
-        bool $withTenantAwarePivotUnique = true,
-        array $configOverrides = []
-    ): void {
+    protected function enableTeamTenancy(bool $withPivotTenantColumn = true, bool $withTenantAwarePivotUnique = true): void
+    {
         Schema::dropIfExists('taxonomyables');
         Schema::dropIfExists('taxonomy_items');
         Schema::dropIfExists('taxonomies');
 
         Schema::create('taxonomies', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->unique();
             $table->string('name');
             $table->string('slug');
             $table->string('type');
@@ -146,6 +152,7 @@ abstract class TestCase extends Orchestra
             $table->unsignedInteger('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
             $table->unsignedBigInteger('team_id')->nullable()->index();
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
             $table->unique(['team_id', 'type', 'slug'], 'taxonomies_team_type_slug_unique');
             $table->index(['team_id', 'type', 'name'], 'taxonomies_team_type_name_index');
@@ -153,6 +160,7 @@ abstract class TestCase extends Orchestra
 
         Schema::create('taxonomy_items', function (Blueprint $table): void {
             $table->id();
+            $table->uuid('uuid')->unique();
             $table->foreignId('taxonomy_id')->constrained('taxonomies')->cascadeOnDelete();
             $table->string('name');
             $table->string('slug');
@@ -162,6 +170,7 @@ abstract class TestCase extends Orchestra
             $table->unsignedInteger('position')->default(0);
             $table->boolean('is_active')->default(true);
             $table->unsignedBigInteger('team_id')->nullable()->index();
+            $table->unsignedInteger('lock_version')->default(0);
             $table->timestamps();
             $table->unique(['taxonomy_id', 'slug'], 'taxonomy_items_taxonomy_slug_unique');
             $table->index(['team_id', 'taxonomy_id', 'position'], 'taxonomy_items_team_taxonomy_position_index');
@@ -193,15 +202,9 @@ abstract class TestCase extends Orchestra
             }
         });
 
-        config()->set('taxonomy.tenancy.enabled', true);
-        config()->set('taxonomy.tenancy.column', 'team_id');
-        config()->set('taxonomy.tenancy.apply_global_scope', true);
-        config()->set('taxonomy.tenancy.fail_when_unresolved', true);
-        config()->set('taxonomy.tenancy.require_pivot_tenant_column', $withPivotTenantColumn);
-
-        foreach ($configOverrides as $key => $value) {
-            config()->set("taxonomy.tenancy.{$key}", $value);
-        }
+        config()->set('corexis.tenancy.enabled', true);
+        config()->set('corexis.tenancy.id_column', 'team_id');
+        config()->set('corexis.tenancy.resolver', StaticTenantResolver::class);
 
         TaxonomyModels::clearColumnExistsCache();
     }
