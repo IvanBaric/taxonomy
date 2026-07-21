@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use IvanBaric\Corexis\Contracts\TenantResolver;
 use IvanBaric\Corexis\Exceptions\TenantNotResolvedException;
 use IvanBaric\Taxonomy\Exceptions\InvalidTaxonomyAssignmentException;
+use IvanBaric\Taxonomy\Models\TaxonomyItem;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 
 trait HasTaxonomies
@@ -234,7 +235,7 @@ trait HasTaxonomies
         $invalid = [];
 
         foreach ($flat as $value) {
-            if ($value instanceof Model && $value instanceof $taxonomyItemModel) {
+            if ($value instanceof Model && ($value instanceof $taxonomyItemModel || $value instanceof TaxonomyItem)) {
                 $key = $value->getKey();
 
                 if ($key === null) {
@@ -533,7 +534,7 @@ trait HasTaxonomies
         $taxonomyItemModel = TaxonomyModels::taxonomyItem();
 
         foreach ($this->flattenInputs($items) as $item) {
-            if ($item instanceof Model && $item instanceof $taxonomyItemModel) {
+            if ($item instanceof Model && ($item instanceof $taxonomyItemModel || $item instanceof TaxonomyItem)) {
                 $values[] = ['id' => (int) $item->getKey()];
 
                 continue;

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use IvanBaric\Taxonomy\Models\TaxonomyItem;
 use IvanBaric\Taxonomy\Support\TaxonomyModels;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\CustomTaxonomy;
 use IvanBaric\Taxonomy\Tests\Fixtures\Models\CustomTaxonomyItem;
@@ -34,4 +35,23 @@ it('uses configured model overrides across relations and trait queries', functio
     expect($post->taxonomy('blog')->getModel())->toBeInstanceOf(CustomTaxonomyItem::class);
     expect($post->taxonomy('blog')->pluck('name')->all())->toBe(['Laravel']);
     expect($post->hasTaxonomy('blog', 'laravel'))->toBeTrue();
+});
+
+it('accepts base taxonomy item instances after configuring a model subclass', function (): void {
+    config()->set('taxonomy.models.taxonomy', CustomTaxonomy::class);
+    config()->set('taxonomy.models.taxonomy_item', CustomTaxonomyItem::class);
+
+    $taxonomy = CustomTaxonomy::create([
+        'name' => 'Categories',
+        'type' => 'blog',
+    ]);
+    $item = TaxonomyItem::create([
+        'taxonomy_id' => $taxonomy->getKey(),
+        'name' => 'Laravel',
+    ]);
+    $post = Post::create(['title' => 'Example']);
+
+    $post->attachTaxonomy('blog', $item);
+
+    expect($post->taxonomy('blog')->pluck('name')->all())->toBe(['Laravel']);
 });
